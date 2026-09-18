@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glucose Result Release Advisor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="warnbar">University coursework &nbsp;&middot;&nbsp; not for clinical use &nbsp;&middot;&nbsp; knowledge base is a draft awaiting expert confirmation</p>
+    <p class="eyebrow">CM 3321 &nbsp;&middot;&nbsp; expert system in Tau Prolog</p>
+    <h1>Is this result fit to release?</h1>
+    <p class="lede">Enter a glucose result and what happened to it. The system
+    decides whether to release it, re-run the same sample, or take fresh blood
+    &mdash; and tells you which, because the family the fault belongs to decides
+    whether the patient has to be bled again.</p>
+  </header>
+
+  <section class="panel examples-bar">
+    <span class="q">Two examples &mdash; same number, different answer</span>
+    <button type="button" class="ghost" id="ex1">Sugar 61, sat 4 hours</button>
+    <button type="button" class="ghost" id="ex2">Sugar 61, QC out of range</button>
+    <button type="button" class="ghost" id="ex3">A clean run</button>
+  </section>
+
+  <div id="formArea"></div>
+
+  <div class="actions">
+    <button type="button" class="btn" id="runBtn">Decide</button>
+    <button type="button" class="ghost" id="clearBtn">Clear all</button>
+  </div>
+
+  <div id="result"></div>
+
+  <footer>
+    <p><b>How it works.</b> The knowledge base is ordinary Prolog running in
+    your browser through Tau Prolog. Nothing is sent anywhere &mdash; no server,
+    no network, no storage. Every decision on this page is made by a Prolog
+    rule; JavaScript only collects the form and displays the answer.</p>
+    <p><b>What it decides.</b> Whether a glucose result is fit to leave the
+    laboratory, and what to do about it if it is not. It does not interpret what
+    a result means for a patient. That is the clinician&rsquo;s work.</p>
+    <p><b>Status.</b> Every threshold and fault rule is a draft from textbooks
+    and papers, not yet confirmed by the domain expert. Knowledge source in use:
+    <span id="kbsource">&mdash;</span>.</p>
+    <p class="sig">Prakasan R. &nbsp;&middot;&nbsp; 224152U &nbsp;&middot;&nbsp;
+    University of Moratuwa</p>
+  </footer>
+
+</div>
+
+<!-- The knowledge base. Mirror of kb.pl, used when the page is opened straight
+     from disk. Edit kb.pl, then run build.bat to refresh this block. -->
+<script type="text/prolog" id="kb">
+__KB__
+</script>
+
+<script src="lib/tau-prolog.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
