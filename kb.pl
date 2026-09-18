@@ -1,0 +1,390 @@
+% ============================================================================
+%  kb.pl  -  Glucose Result Release Advisor : knowledge base
+%
+%  CM 3321 Logic Programming and Artificial Cognitive Systems
+%  Prakasan R.  -  224152U
+%
+%  WHAT IT DECIDES
+%    Is this glucose result fit to release? If not, what does the laboratory
+%    do about it - re-run the same sample, take fresh blood from the patient,
+%    correct the entry, or call the senior?
+%
+%  THE IDEA THE WHOLE SYSTEM TURNS ON
+%    Which FAMILY the fault belongs to decides whether the patient has to be
+%    bled again. A machine fault leaves the blood innocent - re-run it. A
+%    sample fault does not - recollect. Getting that distinction right saves
+%    the patient a second needle.
+%
+%  SCOPE
+%    Fasting blood sugar and HbA1c only. The system never interprets a result
+%    clinically and never names a disease. It decides whether the number is
+%    fit to leave the laboratory.
+%
+%  STATUS
+%    DRAFT. Every threshold and every fault rule below is my own reading of
+%    textbooks and papers. None of it is confirmed by the domain expert yet.
+% ============================================================================
+
+
+% ----------------------------------------------------------------------------
+%  1.  CASE FACTS  -  what is true of this one run
+%      Appended by the interface each time, cleared between reports.
+% ----------------------------------------------------------------------------
+
+:- dynamic(value/3).              % value(s, fbs, 61).
+:- dynamic(previous_value/3).     % previous_value(s, fbs, 95).
+:- dynamic(qc_status/3).          % qc_status(s, fbs, out_of_range).
+:- dynamic(reagent_lot/3).        % reagent_lot(s, fbs, expired).
+:- dynamic(calibration/3).        % calibration(s, fbs, overdue).
+:- dynamic(analyser_flag/2).      % analyser_flag(s, probe_clot).
+:- dynamic(instrument_clean/2).   % instrument_clean(s, no).
+:- dynamic(sample_state/2).       % sample_state(s, haemolysed).
+:- dynamic(tube/3).               % tube(s, fbs, plain).
+:- dynamic(delay_hours/2).        % delay_hours(s, 4).
+:- dynamic(fasting_hours/2).      % fasting_hours(s, 3).
+:- dynamic(drip_arm/1).
+:- dynamic(label_mismatch/1).
+:- dynamic(transcription_doubt/1).
+:- dynamic(repeat_done/2).        % repeat_done(s, fbs).
+:- dynamic(repeat_agrees/2).
+:- dynamic(patient_factor/2).     % patient_factor(s, iron_deficiency).
+:- dynamic(hba1c_method/2).
+
+
+% ----------------------------------------------------------------------------
+%  2.  DOMAIN FACTS  -  which family each fault belongs to
+%      This table is the heart of the system. Everything downstream reads it.
+% ----------------------------------------------------------------------------
+
+fault_family(qc_out,             machine).
+fault_family(reagent_expired,    machine).
+fault_family(calibration_overdue, machine).
+fault_family(probe_clot,         machine).
+fault_family(carryover,          machine).
+fault_family(not_cleaned,        machine).
+
+fault_family(haemolysed,         sample).
+fault_family(clotted,            sample).
+fault_family(lipaemic,           sample).
+fault_family(wrong_tube,         sample).
+fault_family(delayed,            sample).
+
+fault_family(not_fasting,        collection).
+fault_family(drip_arm,           collection).
+
+fault_family(label_mismatch,     identity).
+fault_family(transcription_doubt, identity).
+
+% What each family means for the blood already in the tube.
+blood_still_usable(machine).      % the analyser was wrong, not the specimen
+blood_still_usable(identity).     % except when the label is wrong - see below
+% sample and collection families are NOT listed: fresh blood is needed.
+
+
+% ----------------------------------------------------------------------------
+%  3.  DOMAIN FACTS  -  what each fault does to which test
+%      fault_effect(Fault, Test, Direction, Explanation)
+% ----------------------------------------------------------------------------
+
+fault_effect(delayed, fbs, low,
+    'the cells go on eating the glucose in the tube, about 5 to 7 per cent an hour').
+fault_effect(wrong_tube, fbs, low,
+    'without fluoride the cells consume the glucose faster still').
+fault_effect(not_fasting, fbs, high,
+    'the patient had eaten, so this is not a fasting value').
+fault_effect(drip_arm, fbs, high,
+    'a sample drawn near a running drip carries the drip fluid with it').
+fault_effect(haemolysed, hba1c, unclear,
+    'haemolysis interferes with some HbA1c methods').
+fault_effect(lipaemic, fbs, unclear,
+    'turbidity interferes with the reading at 340 nm').
+fault_effect(qc_out, fbs, unclear,
+    'the run was not in control, so the direction of the error is unknown').
+fault_effect(qc_out, hba1c, unclear,
+    'the run was not in control, so the direction of the error is unknown').
+fault_effect(reagent_expired, fbs, unclear,
+    'an expired lot drifts, usually in one direction, but not predictably').
+fault_effect(calibration_overdue, fbs, unclear,
+    'an uncalibrated run cannot be trusted in either direction').
+fault_effect(carryover, fbs, high,
+    'a very high sample just before this one can carry into the probe').
+fault_effect(not_cleaned, fbs, unclear,
+    'residue in the path contaminates the reading').
+
+
+% ----------------------------------------------------------------------------
+%  4.  DOMAIN FACTS  -  the actions, and what each one means
+% ----------------------------------------------------------------------------
+
+action_label(release,            'Release the result').
+action_label(release_comment,    'Release, but add a comment').
+action_label(rerun_same_sample,  'Re-run the same sample').
+action_label(recollect,          'Take a fresh sample').
+action_label(recollect_teach,    'Take a fresh sample, and tell the patient what to do').
+action_label(recollect_urgent,   'Take a fresh sample NOW, and tell the senior').
+action_label(correct_entry,      'Correct the entry - no new blood needed').
+action_label(escalate,           'Call the senior').
+
+% Priority. Lower number wins when more than one action is possible.
+action_rank(recollect_urgent,  1).
+action_rank(correct_entry,     2).
+action_rank(recollect_teach,   3).
+action_rank(recollect,         4).
+action_rank(rerun_same_sample, 5).
+action_rank(escalate,          6).
+action_rank(release_comment,   7).
+action_rank(release,           8).
+
+% What the patient is told when the collection was at fault.
+instruction(not_fasting,
+    'fast for 8 to 10 hours, water only, before the next draw').
+instruction(drip_arm,
+    'draw from the opposite arm, away from any running drip').
+
+% Plain-English names for the faults.
+fault_label(qc_out,              'quality control out of range').
+fault_label(reagent_expired,     'reagent lot past its expiry').
+fault_label(calibration_overdue, 'calibration overdue').
+fault_label(probe_clot,          'probe clot flagged by the analyser').
+fault_label(carryover,           'carryover from the previous sample').
+fault_label(not_cleaned,         'analyser not cleaned').
+fault_label(haemolysed,          'sample haemolysed').
+fault_label(clotted,             'sample clotted').
+fault_label(lipaemic,            'sample lipaemic').
+fault_label(wrong_tube,          'wrong tube for glucose').
+fault_label(delayed,             'sample sat too long before separation').
+fault_label(not_fasting,         'patient was not fasting').
+fault_label(drip_arm,            'drawn from the drip arm').
+fault_label(label_mismatch,      'label does not match the request').
+fault_label(transcription_doubt, 'entry may have been typed wrongly').
+
+family_label(machine,    'Machine or reagent').
+family_label(sample,     'The specimen').
+family_label(collection, 'How it was collected').
+family_label(identity,   'Identification or entry').
+
+
+% ----------------------------------------------------------------------------
+%  5.  DOMAIN FACTS  -  limits used for the plausibility check
+% ----------------------------------------------------------------------------
+
+max_delay_hours(fbs, 1).
+min_fasting_hours(8).
+proper_tube(fbs, fluoride).
+proper_tube(hba1c, edta).
+
+survivable_low(fbs, 20).        % below this, doubt the number before the patient
+survivable_high(fbs, 800).
+impossible_low(hba1c, 3.0).
+impossible_high(hba1c, 20.0).
+
+critical_low(fbs, 50).
+critical_high(fbs, 400).
+
+delta_limit(fbs, 100).          % mg/dL change from the last result before we doubt it
+delta_limit(hba1c, 2.0).
+
+
+% ----------------------------------------------------------------------------
+%  6.  RULES  -  finding the faults
+%      fault(Sample, Family, Cause)
+% ----------------------------------------------------------------------------
+
+% --- machine family ---
+fault(S, machine, qc_out) :-
+    qc_status(S, _, out_of_range).
+fault(S, machine, reagent_expired) :-
+    reagent_lot(S, _, expired).
+fault(S, machine, calibration_overdue) :-
+    calibration(S, _, overdue).
+fault(S, machine, probe_clot) :-
+    analyser_flag(S, probe_clot).
+fault(S, machine, carryover) :-
+    analyser_flag(S, carryover).
+fault(S, machine, not_cleaned) :-
+    instrument_clean(S, no).
+
+% --- sample family ---
+fault(S, sample, haemolysed) :-
+    sample_state(S, haemolysed).
+fault(S, sample, clotted) :-
+    sample_state(S, clotted).
+fault(S, sample, lipaemic) :-
+    sample_state(S, lipaemic).
+fault(S, sample, wrong_tube) :-
+    value(S, Test, _),
+    tube(S, Test, Used),
+    proper_tube(Test, Proper),
+    Used \== Proper.
+fault(S, sample, delayed) :-
+    value(S, fbs, _),
+    delay_hours(S, D),
+    max_delay_hours(fbs, M),
+    D > M.
+
+% --- collection family ---
+fault(S, collection, not_fasting) :-
+    value(S, fbs, _),
+    fasting_hours(S, H),
+    min_fasting_hours(Min),
+    H < Min.
+fault(S, collection, drip_arm) :-
+    drip_arm(S).
+
+% --- identity family ---
+fault(S, identity, label_mismatch) :-
+    label_mismatch(S).
+fault(S, identity, transcription_doubt) :-
+    transcription_doubt(S).
+
+
+% ----------------------------------------------------------------------------
+%  7.  RULES  -  is the blood in the tube still usable?
+%      This single question decides whether the patient is bled again.
+% ----------------------------------------------------------------------------
+
+specimen_compromised(S) :-
+    fault(S, sample, _).
+specimen_compromised(S) :-
+    fault(S, collection, _).
+specimen_compromised(S) :-
+    fault(S, identity, label_mismatch).
+
+specimen_intact(S) :-
+    \+ specimen_compromised(S).
+
+
+% ----------------------------------------------------------------------------
+%  8.  RULES  -  is the number itself believable?
+% ----------------------------------------------------------------------------
+
+% Outside what a living patient reaches - doubt the number, not the person.
+implausible(S, Test, 'this value is outside what a patient survives - doubt the number first') :-
+    value(S, Test, V),
+    survivable_low(Test, L),
+    V < L.
+implausible(S, Test, 'this value is outside what a patient survives - doubt the number first') :-
+    value(S, Test, V),
+    survivable_high(Test, H),
+    V > H.
+implausible(S, hba1c, 'this HbA1c is outside the range the assay can report') :-
+    value(S, hba1c, V),
+    impossible_high(hba1c, Max),
+    V > Max.
+
+% Delta check - too big a jump from the patient's own last result.
+delta_fail(S, Test, Why) :-
+    value(S, Test, V),
+    previous_value(S, Test, P),
+    delta_limit(Test, Limit),
+    Diff is abs(V - P),
+    Diff > Limit,
+    Why = 'this is a very large change from the patient''s last result'.
+
+plausible(S) :-
+    \+ implausible(S, _, _),
+    \+ delta_fail(S, _, _).
+
+critical(S, Test, low) :-
+    value(S, Test, V), critical_low(Test, T), V =< T.
+critical(S, Test, high) :-
+    value(S, Test, V), critical_high(Test, T), V >= T.
+
+
+% ----------------------------------------------------------------------------
+%  9.  RULES  -  the decision
+%      Each carries its reason, which is what the explanation facility reports.
+% ----------------------------------------------------------------------------
+
+% 1. Identification first. Nothing else matters if this is the wrong patient.
+possible_action(S, recollect_urgent,
+    'the label does not match the request - this may be the wrong patient') :-
+    fault(S, identity, label_mismatch).
+
+% 2. A typing doubt needs no new blood at all.
+possible_action(S, correct_entry,
+    'the result itself is sound - check what was typed against the analyser') :-
+    fault(S, identity, transcription_doubt),
+    \+ fault(S, sample, _),
+    \+ fault(S, collection, _),
+    \+ fault(S, machine, _).
+
+% 3. Collection fault - fresh blood AND the patient has to be told something.
+possible_action(S, recollect_teach, Why) :-
+    fault(S, collection, Cause),
+    fault_label(Cause, Label),
+    instruction(Cause, What),
+    atom_concat(Label, ', so: ', Part),
+    atom_concat(Part, What, Why).
+
+% 4. Sample fault - fresh blood, nothing to teach the patient.
+possible_action(S, recollect, Why) :-
+    fault(S, sample, Cause),
+    fault_label(Cause, Label),
+    atom_concat(Label, ' - this specimen cannot give a sound result', Why).
+
+% 5. Machine fault with the specimen intact - re-run, do not re-bleed.
+possible_action(S, rerun_same_sample, Why) :-
+    fault(S, machine, Cause),
+    specimen_intact(S),
+    fault_label(Cause, Label),
+    atom_concat(Label, ' - the analyser was at fault, so the blood is still good', Why).
+
+% 6. Nothing found, but the number cannot be right.
+possible_action(S, escalate, Why) :-
+    \+ fault(S, _, _),
+    implausible(S, _, Why).
+
+possible_action(S, escalate,
+    'repeated and still the same, with no fault found - the senior decides') :-
+    repeat_done(S, Test),
+    repeat_agrees(S, Test),
+    \+ fault(S, _, _),
+    \+ plausible(S).
+
+% 7. Nothing found, plausible, but worth a note on the report.
+possible_action(S, release_comment,
+    'no fault found, but the change from the last result is large') :-
+    \+ fault(S, _, _),
+    delta_fail(S, _, _).
+
+% 8. Clean.
+possible_action(S, release,
+    'no fault found and the result is plausible') :-
+    \+ fault(S, _, _),
+    plausible(S).
+
+
+% decision/3 - the single action the laboratory should take.
+% The lowest-ranked possible action wins; the rest are reported as well.
+decision(S, Action, Why) :-
+    possible_action(S, Action, Why),
+    action_rank(Action, R),
+    \+ ( possible_action(S, Other, _),
+         action_rank(Other, R2),
+         R2 < R ).
+
+
+% also_fix/2 - a machine fault alongside a recollection still has to be fixed.
+also_fix(S, Why) :-
+    fault(S, machine, Cause),
+    specimen_compromised(S),
+    fault_label(Cause, Label),
+    atom_concat('Fix this before running the new sample: ', Label, Why).
+
+
+% ----------------------------------------------------------------------------
+%  10.  RULES  -  which way the result was pushed, where that is known
+% ----------------------------------------------------------------------------
+
+direction(S, Test, Cause, Direction, Why) :-
+    fault(S, _, Cause),
+    value(S, Test, _),
+    fault_effect(Cause, Test, Direction, Why).
+
+
+% ----------------------------------------------------------------------------
+%  11.  RULES  -  the standing boundary
+% ----------------------------------------------------------------------------
+
+boundary('This system decides whether a result is fit to leave the laboratory. It does not interpret what the result means for the patient - that is the clinician''s work.').
