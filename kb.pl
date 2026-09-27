@@ -525,16 +525,42 @@ direction_unknown(S, Test, Cause, Why) :-
     atom_concat(A, Effect, B),
     atom_concat(B, ') - so this result cannot be judged either way', Why).
 
-% Abnormal, nothing found pushes it that way, and nothing found is unpredictable
-% either. The abnormality belongs to the patient until something proves otherwise.
+% A fault with NO fault_effect/4 entry for this test is a gap in the knowledge
+% base, not a finding that it has no effect. Silence is not evidence.
 %
-% Unless the label does not match. Then we do not know WHOSE value it is, so
-% "treat it as the patient's own" would be exactly the wrong advice.
+% This matters because "probably real" is a positive claim about the patient.
+% Making it from a specimen that is being thrown away, on the strength of a
+% fault whose effect on this test was never written down, is exactly the kind
+% of false reassurance the system exists to prevent.
+%
+% It also subsumes the label-mismatch case: nothing records what a mismatched
+% label does to a glucose, because the question is meaningless - we do not
+% know whose blood it is.
+effect_unrecorded(S, Test, Cause) :-
+    fault(S, _, Cause),
+    value(S, Test, _),
+    \+ fault_effect(Cause, Test, _, _).
+
+% Say so, rather than saying nothing. A gap the system reports is a gap the
+% domain expert can fill; a gap it hides is a wrong answer waiting to happen.
+unrecorded_effect(S, Test, Cause, Why) :-
+    effect_unrecorded(S, Test, Cause),
+    abnormal(S, Test, _),
+    fault_label(Cause, Label),
+    test_label(Test, TL),
+    atom_concat('the knowledge base does not record what ', Label, A),
+    atom_concat(A, ' does to ', B),
+    atom_concat(B, TL, C),
+    atom_concat(C, ', so this result cannot be judged against it', Why).
+
+% Abnormal, nothing found pushes it that way, nothing found is unpredictable,
+% and nothing found has an unrecorded effect. Only then does the abnormality
+% belong to the patient until something proves otherwise.
 unaccounted(S, Test, Why) :-
     abnormal(S, Test, Seen),
-    \+ fault(S, identity, label_mismatch),
     \+ accounts_for(S, Test, _, _),
     \+ direction_unknown(S, Test, _, _),
+    \+ effect_unrecorded(S, Test, _),
     seen_word(Seen, SW),
     atom_concat('this result is ', SW, A),
     atom_concat(A, ' and nothing found in the run pushes it that way - treat the ', B),

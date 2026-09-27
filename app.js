@@ -311,7 +311,8 @@
       { q: 'producing_rule(A, R), decision(s, A, _).',                  vars: ['R'] },
       { q: 'derivation_rule(K, R).',                                    vars: ['K', 'R'] },
       { q: 'boundary(B).',                                              vars: ['B'] },
-      { q: 'fault_note(s, C, N).',                                      vars: ['C', 'N'] }
+      { q: 'fault_note(s, C, N).',                                      vars: ['C', 'N'] },
+      { q: 'unrecorded_effect(s, T, C, W).',                            vars: ['C', 'W'] }
     ]).then(render).catch(fail);
   }
 
@@ -425,6 +426,8 @@
     fits.forEach(function (x)   { lines.push(['fits', 'Consistent', x.W]); });
     clash.forEach(function (x)  { lines.push(['clash', 'Does not fit', x.W]); });
     unsure.forEach(function (x) { lines.push(['unsure', 'Cannot say', x.W]); });
+    uniq(r[14], function (x) { return x.C; })
+      .forEach(function (x) { lines.push(['gap', 'Not recorded', x.W]); });
     real.forEach(function (x)   { lines.push(['real', 'Probably real', x.W]); });
     if (lines.length) {
       h += '<ul class="check">';

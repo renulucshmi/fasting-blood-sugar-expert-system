@@ -176,12 +176,47 @@ const CASES = [
     faults: ['machine/qc_out'],
     consistency: 'direction_unknown' },
 
-  { name: 'Consistency: a label mismatch blocks "probably real"',
+  { name: 'A haemolysed tube is never called probably real',
+    // Regression guard. Nothing records what haemolysis does to a glucose,
+    // and the old rule read that silence as "no effect", so it reported
+    // "treat the high value as the patient's own" about a specimen that
+    // was being thrown away.
+    facts: 'value(s,fbs,350). tube(s,fbs,fluoride). delay_hours(s,0). ' +
+           'fasting_hours(s,10). sample_state(s,haemolysed).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/haemolysed'],
+    consistency: 'unrecorded_effect' },
+
+  { name: 'A clotted tube is never called probably real',
+    facts: 'value(s,fbs,350). tube(s,fbs,fluoride). delay_hours(s,0). ' +
+           'fasting_hours(s,10). sample_state(s,clotted).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/clotted'],
+    consistency: 'unrecorded_effect' },
+
+  { name: 'A known direction still supports probably real',
+    // The claim that must NOT be lost. A delay pushes glucose down; this
+    // result is up; so the delay cannot have caused it and the high is
+    // real, if anything understated.
+    facts: 'value(s,fbs,350). tube(s,fbs,fluoride). delay_hours(s,4). ' +
+           'fasting_hours(s,10).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/delayed'],
+    consistency: 'unaccounted' },
+
+  { name: 'A label mismatch blocks "probably real" and says why',
+    // This used to expect silence. Saying nothing was never right: the
+    // reason no judgement is possible is that nothing records what a
+    // mismatched label does to a glucose, because the question is
+    // meaningless when nobody knows whose blood it is.
     facts: `value(s,fbs,310). ${CLEAN} label_mismatch(s).`,
     action: 'recollect_urgent',
     rule:   'label_mismatch',
     faults: ['identity/label_mismatch'],
-    consistency: 'none' },
+    consistency: 'unrecorded_effect' },
 
   // --- stopping only on evidence, never on ignorance --------------------
   { name: 'A typing doubt does not settle before the specimen is looked at',
@@ -331,6 +366,55 @@ const INVARIANTS = [
       if (!dec.length || dec[0].A !== 'recollect') {
         problems.push(`expected the decision to become recollect, got ` +
                       `${dec.length ? dec[0].A : 'nothing'}`);
+      }
+      return problems;
+    }
+  }
+  ,{
+    name: 'silence in fault_effect never becomes probably real',
+    // Structural guard. For every fault that has no recorded effect on a
+    // test, an abnormal result on that test must produce unrecorded_effect
+    // and must NOT produce unaccounted.
+    run: async () => {
+      const problems = [];
+      const probe = await load('value(s,fbs,94).');
+      const causes = (await query(probe, 'fault_family(C, _).', ['C'])).map(r => r.C);
+
+      const trigger = {
+        qc_out:              'qc_status(s,fbs,out_of_range).',
+        reagent_expired:     'reagent_lot(s,fbs,expired).',
+        calibration_overdue: 'calibration(s,fbs,overdue).',
+        probe_clot:          'analyser_flag(s,probe_clot).',
+        carryover:           'analyser_flag(s,carryover).',
+        not_cleaned:         'instrument_clean(s,no).',
+        haemolysed:          'sample_state(s,haemolysed).',
+        clotted:             'sample_state(s,clotted).',
+        lipaemic:            'sample_state(s,lipaemic).',
+        drip_arm:            'drip_arm(s).',
+        label_mismatch:      'label_mismatch(s).',
+        transcription_doubt: 'transcription_doubt(s).'
+      };
+
+      for (const c of causes) {
+        if (!trigger[c]) continue;   // wrong_tube / delayed / not_fasting need
+                                     // altered base facts; covered by cases
+        const s = await load('value(s,fbs,350). tube(s,fbs,fluoride). ' +
+                             'delay_hours(s,0). fasting_hours(s,10). ' + trigger[c]);
+        await query(s, 'forward_chain.');
+        const recorded = await query(s, `fault_effect(${c}, fbs, _, _).`);
+        const real = await query(s, 'unaccounted(s, _, _).');
+        const gap  = await query(s, 'unrecorded_effect(s, _, _, _).');
+
+        if (!recorded.length) {
+          if (real.length) {
+            problems.push(`${c} has no recorded effect on glucose, yet the ` +
+                          `system called the result probably real`);
+          }
+          if (!gap.length) {
+            problems.push(`${c} has no recorded effect on glucose, and the ` +
+                          `system did not say so`);
+          }
+        }
       }
       return problems;
     }
@@ -518,12 +602,19 @@ async function runCase(c) {
   }
 
   if (c.consistency) {
-    const checks = ['accounts_for', 'does_not_account_for', 'direction_unknown', 'unaccounted'];
+    const checks = ['accounts_for', 'does_not_account_for', 'direction_unknown',
+                    'unrecorded_effect', 'unaccounted'];
     const fired = [];
     for (const k of checks) {
       const arity = k === 'unaccounted' ? 's, T, W' : 's, T, C, W';
       const rows = await query(session, `${k}(${arity}).`);
       if (rows.length) fired.push(k);
+    }
+    // "probably real" is a positive claim about the patient. It must never
+    // coexist with a fault whose effect on this test was never recorded.
+    if (fired.includes('unaccounted') && fired.includes('unrecorded_effect')) {
+      problems.push('unaccounted fired alongside an unrecorded effect: the ' +
+                    'system is treating a gap in the knowledge base as evidence');
     }
     if (c.consistency === 'none') {
       if (fired.length) problems.push(`consistency: expected none, ${fired.join(' and ')} fired`);
