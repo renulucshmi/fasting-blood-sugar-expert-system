@@ -30,6 +30,11 @@ const pl = sandbox.pl;
 
 const KB = fs.readFileSync(__dirname + '/kb.pl', 'utf8');
 
+// Read for the reachability check below: a predicate counts as used if any
+// rule calls it or if either JavaScript file queries it.
+const APP_JS    = fs.readFileSync(__dirname + '/app.js', 'utf8');
+const THIS_FILE = fs.readFileSync(__filename, 'utf8');
+
 // A clean run: the right tube, separated at once, a proper fast.
 const CLEAN = 'tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,10).';
 
@@ -388,6 +393,56 @@ const INVARIANTS = [
       if (!dec.length || dec[0].A !== 'recollect') {
         problems.push(`expected the decision to become recollect, got ` +
                       `${dec.length ? dec[0].A : 'nothing'}`);
+      }
+      return problems;
+    }
+  }
+  ,{
+    name: 'no predicate in the knowledge base is unreachable',
+    // Structural guard against dead knowledge. Every predicate kb.pl defines
+    // must either be called by another rule in kb.pl, or queried by app.js or
+    // by this file. Anything else is a rule that looks like knowledge and
+    // does nothing - which overstates what the system knows.
+    run: () => {
+      const problems = [];
+      const strip = KB.split('\n')
+        .filter(l => !l.trim().startsWith('%'))
+        .join('\n')
+        .replace(/:-\s*dynamic\([^)]*\)\./g, '');
+
+      const clauses = strip.split(/\.\s*\n/).map(c => c.trim()).filter(Boolean);
+
+      const heads = new Set();
+      const bodyGoals = new Set();
+      for (const c of clauses) {
+        const i = c.indexOf(':-');
+        const head = (i === -1 ? c : c.slice(0, i)).trim();
+        const body = i === -1 ? '' : c.slice(i + 2);
+        const hm = head.match(/^([a-z_]\w*)/);
+        if (hm) heads.add(hm[1]);
+        let m;
+        const re = /\b([a-z_]\w*)\s*\(/g;
+        while ((m = re.exec(body)) !== null) bodyGoals.add(m[1]);
+        // bare goals with no arguments, e.g. forward_chain
+        for (const g of body.split(/[,;]/)) {
+          const bm = g.trim().match(/^([a-z_]\w*)$/);
+          if (bm) bodyGoals.add(bm[1]);
+        }
+      }
+
+      const BUILTIN = new Set(['atom_concat', 'assertz', 'retract', 'retractall',
+        'findall', 'member', 'catch', 'clause', 'is', 'forall', 'between',
+        'format', 'msort', 'abs', 'true', 'fail']);
+
+      const js = APP_JS + '\n' + THIS_FILE;
+
+      for (const name of [...heads].sort()) {
+        if (BUILTIN.has(name)) continue;
+        const calledInKb = bodyGoals.has(name);
+        const queried = new RegExp('\\b' + name + '\\s*[(.]').test(js);
+        if (!calledInKb && !queried) {
+          problems.push(`${name} is defined in kb.pl but nothing calls or queries it`);
+        }
       }
       return problems;
     }

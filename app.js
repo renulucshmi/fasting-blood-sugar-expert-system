@@ -196,25 +196,25 @@
     if (S.at >= S.order.length) return finish();
     var nextRank = S.questions[S.order[S.at]].rank;
     run(facts(), [{ q: 'settled(s, ' + nextRank + ').', vars: null },
-                  { q: 'specimen_compromised(s).',      vars: null }])
+                  { q: 'still_useful(Q).',              vars: ['Q'] }])
       .then(function (r) {
         var isSettled = r[0].length > 0;
-        var compromised = r[1].length > 0;
+
+        // Which of the remaining questions still matter even though the
+        // decision is settled? still_useful/1 answers that, not this file.
+        var useful = {};
+        r[1].forEach(function (x) { useful[x.Q] = true; });
+        var usefulLeft = S.order.slice(S.at).filter(function (id) {
+          return useful[id];
+        });
+
         if (isSettled && !S.extra) {
-          // A machine fault cannot change a recollection, but it still has to
-          // be fixed before the fresh sample runs. Offer, do not force.
-          var machineLeft = S.order.slice(S.at).some(function (id) {
-            return S.questions[id].rank === 5;
-          });
-          if (compromised && machineLeft) return offerExtra(nextRank);
+          if (usefulLeft.length) return offerExtra();
           return finish();
         }
         if (isSettled && S.extra) {
-          var anyLeft = S.order.slice(S.at).some(function (id) {
-            return S.questions[id].rank === 5;
-          });
-          if (!anyLeft) return finish();
-          while (S.at < S.order.length && S.questions[S.order[S.at]].rank !== 5) S.at++;
+          if (!usefulLeft.length) return finish();
+          while (S.at < S.order.length && !useful[S.order[S.at]]) S.at++;
           if (S.at >= S.order.length) return finish();
         }
         showQuestion(S.questions[S.order[S.at]]);
@@ -290,7 +290,7 @@
     if (el('backBtn')) el('backBtn').onclick = back;
   }
 
-  function offerExtra(nextRank) {
+  function offerExtra() {
     run(facts(), [{ q: 'decision(s, A, _), action_label(A, L).', vars: ['L'] }])
       .then(function (r) {
         var label = r[0][0] ? r[0][0].L : 'the decision';
@@ -334,7 +334,8 @@
       { q: 'derivation_rule(K, R).',                                    vars: ['K', 'R'] },
       { q: 'boundary(B).',                                              vars: ['B'] },
       { q: 'fault_note(s, C, N).',                                      vars: ['C', 'N'] },
-      { q: 'unrecorded_effect(s, T, C, W).',                            vars: ['C', 'W'] }
+      { q: 'unrecorded_effect(s, T, C, W).',                            vars: ['C', 'W'] },
+      { q: 'stopped_early(W).',                                         vars: ['W'] }
     ]).then(render).catch(fail);
   }
 
@@ -414,10 +415,12 @@
 
     var skipped = S.order.length - S.trace.length;
     if (skipped > 0) {
+      // The counting is this file's business; the reason is the knowledge
+      // base's, and comes back from stopped_early/1.
+      var why = r[15][0] ? r[15][0].W : 'the decision was already settled';
       h += '<p class="aside">Asked ' + S.trace.length + ' of ' + S.order.length +
-           ' questions. The other ' + skipped + ' were never asked, because ' +
-           'settled/2 proved that nothing still unasked could rank above this ' +
-           'action.</p>';
+           ' questions. The other ' + skipped + ' were never put, because ' +
+           esc(why) + '.</p>';
     }
 
     h += '<h3>Facts derived</h3>';

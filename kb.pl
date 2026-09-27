@@ -45,10 +45,6 @@
 :- dynamic(drip_arm/1).
 :- dynamic(label_mismatch/1).
 :- dynamic(transcription_doubt/1).
-:- dynamic(repeat_done/2).        % repeat_done(s, fbs).
-:- dynamic(repeat_agrees/2).
-:- dynamic(patient_factor/2).     % patient_factor(s, iron_deficiency).
-:- dynamic(hba1c_method/2).
 
 
 % ----------------------------------------------------------------------------
@@ -74,11 +70,6 @@ fault_family(drip_arm,           collection).
 
 fault_family(label_mismatch,     identity).
 fault_family(transcription_doubt, identity).
-
-% What each family means for the blood already in the tube.
-blood_still_usable(machine).      % the analyser was wrong, not the specimen
-blood_still_usable(identity).     % except when the label is wrong - see below
-% sample and collection families are NOT listed: fresh blood is needed.
 
 
 % ----------------------------------------------------------------------------
@@ -306,11 +297,6 @@ forward_chain :-
     forward_chain.
 forward_chain.
 
-% Clear everything the cycle derived, so a new case starts from nothing.
-reset_derived :-
-    retractall(fault(_, _, _)),
-    retractall(specimen_compromised(_)).
-
 specimen_intact(S) :-
     \+ specimen_compromised(S).
 
@@ -406,13 +392,6 @@ possible_action(S, escalate, Why) :-
     \+ fault(S, _, _),
     implausible(S, _, Why).
 
-possible_action(S, escalate,
-    'repeated and still the same, with no fault found - the senior decides') :-
-    repeat_done(S, Test),
-    repeat_agrees(S, Test),
-    \+ fault(S, _, _),
-    \+ plausible(S).
-
 % 7. Nothing found, plausible, but worth a note on the report.
 possible_action(S, release_comment,
     'no fault found, but the change from the last result is large') :-
@@ -442,16 +421,6 @@ also_fix(S, Why) :-
     specimen_compromised(S),
     fault_label(Cause, Label),
     atom_concat('Fix this before running the new sample: ', Label, Why).
-
-
-% ----------------------------------------------------------------------------
-%  10.  RULES  -  which way the result was pushed, where that is known
-% ----------------------------------------------------------------------------
-
-direction(S, Test, Cause, Direction, Why) :-
-    fault(S, _, Cause),
-    value(S, Test, _),
-    fault_effect(Cause, Test, Direction, Why).
 
 
 % ----------------------------------------------------------------------------
@@ -651,12 +620,18 @@ option(clean, no,  'No').
 unit(fasting, hours).
 unit(delay,   hours).
 
-% Which questions, if any, still matter once the decision is settled. A
-% machine fault cannot change a recollection, but it still has to be fixed
-% before the fresh sample is run - see also_fix/2.
-still_useful(Id) :-
-    askable(Id, 5, _, _),
-    specimen_compromised(s).
+% Which questions still matter once the decision is settled.
+%
+% A machine fault cannot change a recollection - the patient is bled again
+% either way - but the analyser still has to be put right before the fresh
+% sample is run. See also_fix/2.
+%
+% Derived from establishes/2 and fault_family/2 rather than from a hardcoded
+% rank, so it follows the tables if the questions are ever reordered.
+still_useful(Q) :-
+    specimen_compromised(s),
+    establishes(Q, Cause),
+    fault_family(Cause, machine).
 
 % Which question can establish which fault. The consultation needs this to
 % tell the difference between "I asked and found nothing" and "I never asked".
@@ -722,15 +697,13 @@ settled(S, LowestUnasked) :-
     \+ ( requires_absence_of(Action, Family),
          \+ family_explored(Family, LowestUnasked) ).
 
-% How the system explains stopping early.
-stopped_early(Asked, Total, Why) :-
+% Why the consultation stopped where it did. The counting is the interface's
+% business; the reason is the knowledge base's.
+stopped_early(Why) :-
     decision(s, Action, _),
     action_label(Action, Label),
-    atom_concat('Stopped after ', Asked, A),
-    atom_concat(A, ' of ', B),
-    atom_concat(B, Total, C),
-    atom_concat(C, ' questions: nothing still unasked can rank above ', D),
-    atom_concat(D, Label, Why).
+    atom_concat('nothing still unasked could rank above "', Label, A),
+    atom_concat(A, '"', Why).
 
 
 % ----------------------------------------------------------------------------
