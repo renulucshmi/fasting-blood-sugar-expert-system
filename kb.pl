@@ -186,58 +186,68 @@ delta_limit(hba1c, 2.0).
 
 
 % ----------------------------------------------------------------------------
-%  6.  RULES  -  finding the faults
-%      fault_holds(Sample, Family, Cause)
+%  6.  RULES  -  the evidence for each fault
+%      fault_condition(Sample, Cause)
 %
-%      These are the CONDITIONS. They are not the faults themselves - the
-%      forward-chaining cycle in section 7 reads them and asserts fault/3.
+%      These say ONLY what has to be true for a fault to exist. They say
+%      nothing about which family it belongs to - that is fault_family/2's
+%      job in section 2, and its job alone.
+%
+%      Keeping the family out of here is what makes section 2 the single
+%      source of truth. Change fault_family(probe_clot, sample) up there and
+%      the system reclassifies it, with no other edit anywhere. If the family
+%      were named in the heads below, the table and the reasoning could drift
+%      apart without anything noticing.
+%
+%      These are conditions, not faults. The forward-chaining cycle in
+%      section 7 reads them, looks the family up, and asserts fault/3.
 % ----------------------------------------------------------------------------
 
-% --- machine family ---
-fault_holds(S, machine, qc_out) :-
+% --- the analyser and its reagents ---
+fault_condition(S, qc_out) :-
     qc_status(S, _, out_of_range).
-fault_holds(S, machine, reagent_expired) :-
+fault_condition(S, reagent_expired) :-
     reagent_lot(S, _, expired).
-fault_holds(S, machine, calibration_overdue) :-
+fault_condition(S, calibration_overdue) :-
     calibration(S, _, overdue).
-fault_holds(S, machine, probe_clot) :-
+fault_condition(S, probe_clot) :-
     analyser_flag(S, probe_clot).
-fault_holds(S, machine, carryover) :-
+fault_condition(S, carryover) :-
     analyser_flag(S, carryover).
-fault_holds(S, machine, not_cleaned) :-
+fault_condition(S, not_cleaned) :-
     instrument_clean(S, no).
 
-% --- sample family ---
-fault_holds(S, sample, haemolysed) :-
+% --- the specimen itself ---
+fault_condition(S, haemolysed) :-
     sample_state(S, haemolysed).
-fault_holds(S, sample, clotted) :-
+fault_condition(S, clotted) :-
     sample_state(S, clotted).
-fault_holds(S, sample, lipaemic) :-
+fault_condition(S, lipaemic) :-
     sample_state(S, lipaemic).
-fault_holds(S, sample, wrong_tube) :-
+fault_condition(S, wrong_tube) :-
     value(S, Test, _),
     tube(S, Test, Used),
     proper_tube(Test, Proper),
     Used \== Proper.
-fault_holds(S, sample, delayed) :-
+fault_condition(S, delayed) :-
     value(S, fbs, _),
     delay_hours(S, D),
     max_delay_hours(fbs, M),
     D > M.
 
-% --- collection family ---
-fault_holds(S, collection, not_fasting) :-
+% --- how it was collected ---
+fault_condition(S, not_fasting) :-
     value(S, fbs, _),
     fasting_hours(S, H),
     min_fasting_hours(Min),
     H < Min.
-fault_holds(S, collection, drip_arm) :-
+fault_condition(S, drip_arm) :-
     drip_arm(S).
 
-% --- identity family ---
-fault_holds(S, identity, label_mismatch) :-
+% --- identification and entry ---
+fault_condition(S, label_mismatch) :-
     label_mismatch(S).
-fault_holds(S, identity, transcription_doubt) :-
+fault_condition(S, transcription_doubt) :-
     transcription_doubt(S).
 
 
@@ -269,8 +279,12 @@ fault_holds(S, identity, transcription_doubt) :-
 % fires(Conclusion) - one rule that is ready to fire and has not fired yet.
 
 % Level 1: a condition in section 6 holds, and this fault is not yet known.
+% The family is LOOKED UP from fault_family/2 rather than read off the
+% condition. That lookup is the only route from a cause to a family, which is
+% what makes section 2 authoritative.
 fires(fault(S, Fam, Cause)) :-
-    fault_holds(S, Fam, Cause),
+    fault_condition(S, Cause),
+    fault_family(Cause, Fam),
     \+ fault(S, Fam, Cause).
 
 % Level 2: a fault DERIVED at level 1 is the condition for this one.
@@ -649,7 +663,7 @@ producing_rule(release,
 
 % The rule that fired to derive each fault, and the one that selected the action.
 derivation_rule(fault,
-  'fires(fault(S, Fam, Cause)) :- fault_holds(S, Fam, Cause), \\+ fault(S, Fam, Cause).   [forward chaining]').
+  'fires(fault(S, Fam, Cause)) :- fault_condition(S, Cause), fault_family(Cause, Fam), \\+ fault(S, Fam, Cause).   [forward chaining]').
 derivation_rule(specimen,
   'fires(specimen_compromised(S)) :- fault(S, Fam, Cause), compromises_specimen(Fam, Cause).   [forward chaining, level 2]').
 derivation_rule(selection,

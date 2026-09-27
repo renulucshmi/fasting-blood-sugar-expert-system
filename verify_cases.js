@@ -173,6 +173,115 @@ const CASES = [
     notSettledAt: 4 }
 ];
 
+// ------------------------------------------------- structural invariants
+//
+// These do not run a case. They check properties of the knowledge base
+// itself, which is where a defect can hide without any single case failing.
+
+const INVARIANTS = [
+  {
+    name: 'every cause derives with the family fault_family/2 states',
+    // Trigger each of the 15 causes in turn and check the derived family
+    // against the table. Proves the table governs all of them, not just the
+    // ones a case happens to exercise.
+    run: async () => {
+      const problems = [];
+      const base = 'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,10).';
+      const triggers = {
+        qc_out:              base + ' qc_status(s,fbs,out_of_range).',
+        reagent_expired:     base + ' reagent_lot(s,fbs,expired).',
+        calibration_overdue: base + ' calibration(s,fbs,overdue).',
+        probe_clot:          base + ' analyser_flag(s,probe_clot).',
+        carryover:           base + ' analyser_flag(s,carryover).',
+        not_cleaned:         base + ' instrument_clean(s,no).',
+        haemolysed:          base + ' sample_state(s,haemolysed).',
+        clotted:             base + ' sample_state(s,clotted).',
+        lipaemic:            base + ' sample_state(s,lipaemic).',
+        wrong_tube:          'value(s,fbs,94). tube(s,fbs,plain). delay_hours(s,0). fasting_hours(s,10).',
+        delayed:             'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,4). fasting_hours(s,10).',
+        not_fasting:         'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,2).',
+        drip_arm:            base + ' drip_arm(s).',
+        label_mismatch:      base + ' label_mismatch(s).',
+        transcription_doubt: base + ' transcription_doubt(s).'
+      };
+
+      const table = await load('');
+      const entries = await query(table, 'fault_family(C, F).', ['C', 'F']);
+      if (entries.length !== 15) {
+        problems.push(`fault_family/2 has ${entries.length} entries, expected 15`);
+      }
+
+      for (const { C, F } of entries) {
+        if (!triggers[C]) {
+          problems.push(`${C} is in the table but this test has no way to trigger it`);
+          continue;
+        }
+        const s = await load(triggers[C]);
+        await query(s, 'forward_chain.');
+        const got = await query(s, `fault(s, Fam, ${C}).`, ['Fam']);
+        if (!got.length) {
+          problems.push(`${C} is in the table but nothing derived it`);
+        } else if (got[0].Fam !== F) {
+          problems.push(`${C}: table says ${F}, system derived ${got[0].Fam}`);
+        }
+      }
+      return problems;
+    }
+  },
+  {
+    name: 'editing fault_family/2 alone reclassifies a fault',
+    // Regression guard for the defect where the family was ALSO written into
+    // the head of each condition rule, so the two could disagree and the
+    // table would be silently ignored.
+    //
+    // This edits the shipped knowledge base text, changing one line and
+    // nothing else, then checks the change carried all the way through to
+    // the specimen decision.
+    run: async () => {
+      const problems = [];
+      const line = KB.split('\n').find(l => /^fault_family\(probe_clot/.test(l));
+      if (!line) return ['could not find the probe_clot entry in fault_family/2'];
+
+      const altered = KB.replace(line, 'fault_family(probe_clot, sample).');
+      const facts = 'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). ' +
+                    'fasting_hours(s,10). analyser_flag(s,probe_clot).';
+
+      const session = await new Promise((resolve, reject) => {
+        const sess = pl.create(400000);
+        sess.consult(altered + '\n' + facts, {
+          success: () => resolve(sess),
+          error: e => reject(pl.format_answer(e))
+        });
+      });
+      await query(session, 'forward_chain.');
+
+      const got = await query(session, 'fault(s, F, probe_clot).', ['F']);
+      if (!got.length || got[0].F !== 'sample') {
+        problems.push(
+          `changing one line of fault_family/2 did not reclassify probe_clot ` +
+          `(derived ${got.length ? got[0].F : 'nothing'}) - the family is coming ` +
+          `from somewhere other than the table`);
+      }
+
+      // And it must carry through: a sample fault compromises the specimen,
+      // a machine fault does not. If only the label changed, this stays intact.
+      const intact = await query(session, 'specimen_intact(s).');
+      if (intact.length) {
+        problems.push('probe_clot reclassified as a sample fault left the specimen ' +
+                      'intact - the downstream rules are not reading the derived family');
+      }
+
+      // The decision must follow too: recollect, not rerun.
+      const dec = await query(session, 'decision(s, A, _).', ['A']);
+      if (!dec.length || dec[0].A !== 'recollect') {
+        problems.push(`expected the decision to become recollect, got ` +
+                      `${dec.length ? dec[0].A : 'nothing'}`);
+      }
+      return problems;
+    }
+  }
+];
+
 // ------------------------------------------------------------------ runner
 
 function query(session, goal, vars) {
@@ -282,6 +391,20 @@ async function runCase(c) {
   console.log('='.repeat(78));
 
   let failed = 0;
+
+  for (const inv of INVARIANTS) {
+    let problems;
+    try {
+      problems = await inv.run();
+    } catch (e) {
+      problems = [`could not run: ${e}`];
+    }
+    const ok = problems.length === 0;
+    if (!ok) failed++;
+    console.log(`\n${ok ? 'pass' : 'FAIL'}  [invariant] ${inv.name}`);
+    problems.forEach(p => console.log(`      >>> ${p}`));
+  }
+
   for (const c of CASES) {
     let r;
     try {
@@ -301,7 +424,8 @@ async function runCase(c) {
   }
 
   console.log('\n' + '='.repeat(78));
-  console.log(`${CASES.length - failed} of ${CASES.length} passed` +
+  const total = CASES.length + INVARIANTS.length;
+  console.log(`${total - failed} of ${total} passed` +
               (failed ? `, ${failed} FAILED` : ''));
   process.exit(failed ? 1 : 0);
 })();
