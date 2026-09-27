@@ -135,6 +135,28 @@ const CASES = [
     faults: ['machine/qc_out', 'sample/haemolysed'],
     alsoFix: true },
 
+  { name: 'An HbA1c below the assay range is not released',
+    // Regression guard. impossible_low/2 was declared in the knowledge base
+    // and read by no rule, so an HbA1c of 1.5 was released as a real result.
+    facts: 'value(s,hba1c,1.5). tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'escalate',
+    rule:   'implausible',
+    faults: [] },
+
+  { name: 'An HbA1c just below the assay floor is not released',
+    facts: 'value(s,hba1c,2.9). tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'escalate',
+    rule:   'implausible',
+    faults: [] },
+
+  { name: 'A low but reportable HbA1c is still released',
+    // The other side of the boundary: 3.5 is unusual but the assay can
+    // report it, so the system must not reject it.
+    facts: 'value(s,hba1c,3.5). tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'release',
+    rule:   'plausible',
+    faults: [] },
+
   { name: 'No fault, but an impossible number',
     facts: `value(s,fbs,12). ${CLEAN}`,
     action: 'escalate',
@@ -367,6 +389,55 @@ const INVARIANTS = [
         problems.push(`expected the decision to become recollect, got ` +
                       `${dec.length ? dec[0].A : 'nothing'}`);
       }
+      return problems;
+    }
+  }
+  ,{
+    name: 'every declared limit is actually consulted by a rule',
+    // Structural guard against dead knowledge. impossible_low/2 sat in the
+    // knowledge base unread for the whole of the project's life. This sweeps
+    // every limit fact, builds a value just past it, and insists the rule
+    // that is supposed to notice actually fires.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+
+      const base = {
+        fbs:   'tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,10).',
+        hba1c: 'tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).'
+      };
+
+      // limit predicate -> how to trip it, and which rule must then fire
+      const spec = [
+        ['survivable_low',  v => v - 1,   'implausible(s, _, _).'],
+        ['survivable_high', v => v + 1,   'implausible(s, _, _).'],
+        ['impossible_low',  v => v - 0.1, 'implausible(s, _, _).'],
+        ['impossible_high', v => v + 0.1, 'implausible(s, _, _).'],
+        ['critical_low',    v => v,       'critical(s, _, _).'],
+        ['critical_high',   v => v,       'critical(s, _, _).']
+      ];
+
+      let checked = 0;
+      for (const [pred, trip, goal] of spec) {
+        const rows = await query(probe, `${pred}(T, V).`, ['T', 'V']);
+        if (!rows.length) {
+          problems.push(`${pred}/2 declares no limits at all`);
+          continue;
+        }
+        for (const { T, V } of rows) {
+          if (!base[T]) { problems.push(`no base facts for test ${T}`); continue; }
+          const v = trip(parseFloat(V));
+          const s = await load(`value(s,${T},${v}). ${base[T]}`);
+          await query(s, 'forward_chain.');
+          const fired = await query(s, goal);
+          checked++;
+          if (!fired.length) {
+            problems.push(`${pred}(${T}, ${V}) is declared but nothing reacts ` +
+                          `to a value of ${v}: the limit is dead knowledge`);
+          }
+        }
+      }
+      if (checked < 6) problems.push(`only ${checked} limits were exercised, expected at least 6`);
       return problems;
     }
   }

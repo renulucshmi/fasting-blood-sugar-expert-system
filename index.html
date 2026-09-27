@@ -369,9 +369,19 @@ implausible(S, Test, 'this value is outside what a patient survives - doubt the 
     value(S, Test, V),
     survivable_high(Test, H),
     V > H.
-implausible(S, hba1c, 'this HbA1c is outside the range the assay can report') :-
-    value(S, hba1c, V),
-    impossible_high(hba1c, Max),
+% The assay's own reportable range, in both directions.
+%
+% Written over Test rather than hardcoded to hba1c, so a limit declared for a
+% new test is checked the moment it is added. The old clause checked only the
+% high end and named hba1c in its head, which left impossible_low/2 sitting in
+% the knowledge base unread - an HbA1c of 1.5 was released as a real result.
+implausible(S, Test, 'this value is below the range the assay can report') :-
+    value(S, Test, V),
+    impossible_low(Test, Min),
+    V < Min.
+implausible(S, Test, 'this value is above the range the assay can report') :-
+    value(S, Test, V),
+    impossible_high(Test, Max),
     V > Max.
 
 % Delta check - too big a jump from the patient's own last result.
