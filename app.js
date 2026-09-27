@@ -94,12 +94,11 @@
     clean:   function (v) { return v === 'no'  ? 'instrument_clean(s, no).' : ''; },
     look:    function (v) { return v === 'normal' ? '' : 'sample_state(s, ' + v + ').'; },
     flag:    function (v) { return v === 'none' ? '' : 'analyser_flag(s, ' + v + ').'; },
-    tube:    function (v) {
-               var t = [];
-               if (S.vals.fbs !== null)   t.push('tube(s, fbs, ' + v + ').');
-               if (S.vals.hba1c !== null) t.push('tube(s, hba1c, ' + v + ').');
-               return t.join(' ');
-             },
+    // Glucose and HbA1c are always two tubes. One answer must never be
+    // applied to both, or whichever test was not asked about is recorded
+    // wrong and the panel can never be released.
+    tube_fbs:   function (v) { return 'tube(s, fbs, ' + v + ').'; },
+    tube_hba1c: function (v) { return 'tube(s, hba1c, ' + v + ').'; },
     fasting: function (v) { return 'fasting_hours(s, ' + v + ').'; },
     delay:   function (v) { return 'delay_hours(s, ' + v + ').'; }
   };
@@ -133,7 +132,8 @@
     };
     run(facts(), [{ q: 'askable(I, R, K, Q).', vars: ['I', 'R', 'K', 'Q'] },
                   { q: 'option(I, V, L).',     vars: ['I', 'V', 'L'] },
-                  { q: 'unit(I, U).',          vars: ['I', 'U'] }])
+                  { q: 'unit(I, U).',          vars: ['I', 'U'] },
+                  { q: 'relevant(I).',         vars: ['I'] }])
       .then(function (r) {
         S.questions = {};
         r[0].forEach(function (a) {
@@ -145,9 +145,16 @@
         r[2].forEach(function (u) {
           if (S.questions[u.I]) S.questions[u.I].unit = u.U;
         });
-        S.order = Object.keys(S.questions).sort(function (a, b) {
-          return S.questions[a].rank - S.questions[b].rank;
-        });
+        // relevant/1 decides what is worth asking for the tests actually
+        // requested. An HbA1c alone needs no fasting window and no
+        // separation time, so those questions never appear.
+        var ok = {};
+        r[3].forEach(function (x) { ok[x.I] = true; });
+        S.order = Object.keys(S.questions)
+          .filter(function (id) { return ok[id]; })
+          .sort(function (a, b) {
+            return S.questions[a].rank - S.questions[b].rank;
+          });
         step();
       })
       .catch(fail);
@@ -303,7 +310,8 @@
       { q: 'possible_action(s, A, W), action_label(A, L).',             vars: ['A', 'W', 'L'] },
       { q: 'producing_rule(A, R), decision(s, A, _).',                  vars: ['R'] },
       { q: 'derivation_rule(K, R).',                                    vars: ['K', 'R'] },
-      { q: 'boundary(B).',                                              vars: ['B'] }
+      { q: 'boundary(B).',                                              vars: ['B'] },
+      { q: 'fault_note(s, C, N).',                                      vars: ['C', 'N'] }
     ]).then(render).catch(fail);
   }
 
@@ -335,6 +343,9 @@
     var rule = r[10][0] ? r[10][0].R : '';
     var derivations = r[11];
     var boundary = r[12][0] ? r[12][0].B : '';
+    var notes = {};
+    uniq(r[13], function (x) { return x.C + x.N; })
+      .forEach(function (x) { (notes[x.C] = notes[x.C] || []).push(x.N); });
 
     var h = '<div class="verdict ' + (d ? (TONE[d.A] || 'ok') : 'ok') + '">' +
               '<p class="count">The laboratory should</p>' +
@@ -391,7 +402,11 @@
       h += '<ul>';
       faults.forEach(function (x) {
         h += '<li><code>fault(s, ' + esc(x.F) + ', ' + esc(x.C) + ')</code>: ' +
-             esc(x.CL) + '</li>';
+             esc(x.CL);
+        (notes[x.C] || []).forEach(function (n) {
+          h += '<br><span class="note">' + esc(cap(n)) + '</span>';
+        });
+        h += '</li>';
       });
       if (!intact) h += '<li><code>specimen_compromised(s)</code></li>';
       h += '</ul>';

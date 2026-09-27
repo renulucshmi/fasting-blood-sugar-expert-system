@@ -192,7 +192,7 @@ fault_label(not_cleaned,         'analyser not cleaned').
 fault_label(haemolysed,          'sample haemolysed').
 fault_label(clotted,             'sample clotted').
 fault_label(lipaemic,            'sample lipaemic').
-fault_label(wrong_tube,          'the wrong tube was used for this test').
+fault_label(wrong_tube,          'the wrong tube was used').
 fault_label(delayed,             'sample sat too long before separation').
 fault_label(not_fasting,         'patient was not fasting').
 fault_label(drip_arm,            'drawn from the drip arm').
@@ -612,7 +612,8 @@ askable(typed,   2, yn,     'Any doubt about what was typed into the system?').
 askable(fasting, 3, number, 'How many hours had the patient fasted?').
 askable(drip,    3, yn,     'Was the blood drawn from the arm with the drip?').
 askable(look,    4, choice, 'How does the sample look?').
-askable(tube,    4, choice, 'Which tube was the sample drawn into?').
+askable(tube_fbs,   4, choice, 'Which tube was the glucose drawn into?').
+askable(tube_hba1c, 4, choice, 'Which tube was the HbA1c drawn into?').
 askable(delay,   4, number, 'How many hours before the plasma was separated?').
 askable(qc,      5, yn,     'Did the quality control for this run pass?').
 askable(lot,     5, yn,     'Is the reagent lot within its expiry date?').
@@ -631,10 +632,14 @@ option(look,  normal,     'Normal').
 option(look,  haemolysed, 'Haemolysed').
 option(look,  clotted,    'Clotted').
 option(look,  lipaemic,   'Lipaemic').
-option(tube,  fluoride, 'Fluoride oxalate').
-option(tube,  edta,     'EDTA').
-option(tube,  plain,    'Plain').
-option(tube,  heparin,  'Heparin').
+option(tube_fbs,  fluoride, 'Fluoride oxalate').
+option(tube_fbs,  edta,     'EDTA').
+option(tube_fbs,  plain,    'Plain').
+option(tube_fbs,  heparin,  'Heparin').
+option(tube_hba1c, edta,     'EDTA').
+option(tube_hba1c, fluoride, 'Fluoride oxalate').
+option(tube_hba1c, plain,    'Plain').
+option(tube_hba1c, heparin,  'Heparin').
 option(flag,  none,       'None').
 option(flag,  probe_clot, 'Probe clot').
 option(flag,  carryover,  'Carryover').
@@ -709,6 +714,67 @@ derivation_rule(specimen,
   'fires(specimen_compromised(S)) :- fault(S, Fam, Cause), compromises_specimen(Fam, Cause).   [forward chaining, level 2]').
 derivation_rule(selection,
   'decision(S, Action, Why) :- possible_action(S, Action, Why), action_rank(Action, R), \\+ ( possible_action(S, Other, _), action_rank(Other, R2), R2 < R ).   [backward chaining]').
+
+
+% ----------------------------------------------------------------------------
+%  15.  FBS AND HbA1c ARE NOT THE SAME SPECIMEN
+%
+%  Glucose is drawn into fluoride oxalate; HbA1c into EDTA. They are always
+%  two tubes, so they are two questions. Asking once and applying the answer
+%  to both guarantees that one of them is recorded wrong.
+%
+%  The same separation governs which questions are worth asking at all. The
+%  fasting window and the time to separation are glucose facts. If only an
+%  HbA1c was requested, neither question has anything to bear on, so the
+%  consultation does not ask them.
+% ----------------------------------------------------------------------------
+
+% A question that only matters when a particular test was requested.
+test_specific(tube_fbs,   fbs).
+test_specific(tube_hba1c, hba1c).
+test_specific(fasting,    fbs).     % HbA1c needs no fast
+test_specific(delay,      fbs).     % HbA1c is stable to a delay; glucose is not
+
+% relevant(Question) - worth asking, given what was actually requested.
+%
+% No cut here. The interface calls relevant/1 with Q unbound to enumerate the
+% whole list, and a cut would commit to the first question that happened to be
+% test-specific and discard every question after it.
+relevant(Q) :-
+    askable(Q, _, _, _),
+    \+ test_specific(Q, _).
+relevant(Q) :-
+    askable(Q, _, _, _),
+    test_specific(Q, Test),
+    value(s, Test, _).
+
+% Plain names, so a reason can say which test and which tube.
+test_label(fbs,   'the glucose').
+test_label(hba1c, 'the HbA1c').
+
+tube_label(fluoride, 'a fluoride oxalate tube').
+tube_label(edta,     'an EDTA tube').
+tube_label(plain,    'a plain tube').
+tube_label(heparin,  'a heparin tube').
+
+% Which test's tube was wrong, what was used, and what it needed.
+wrong_tube_detail(S, Test, Used, Proper) :-
+    value(S, Test, _),
+    tube(S, Test, Used),
+    proper_tube(Test, Proper),
+    Used \== Proper.
+
+% fault_note/3 - detail a plain fault_label cannot carry. The interface shows
+% it beside the fault it belongs to.
+fault_note(S, wrong_tube, Note) :-
+    wrong_tube_detail(S, Test, Used, Proper),
+    test_label(Test, TL),
+    tube_label(Used, UL),
+    tube_label(Proper, PL),
+    atom_concat(TL, ' was drawn into ', A),
+    atom_concat(A, UL, B),
+    atom_concat(B, ', but it needs ', C),
+    atom_concat(C, PL, Note).
 </script>
 
 <script src="lib/tau-prolog.js"></script>

@@ -72,6 +72,32 @@ const CASES = [
     rule:   'fault(S, sample, Cause)',
     faults: ['sample/haemolysed'] },
 
+  { name: 'A full panel in the correct tubes releases',
+    // Regression guard. The interface used to ask one tube question and
+    // apply the answer to both tests, so one of them was always recorded
+    // wrong and a combined panel could never be released.
+    facts: 'value(s,fbs,94). value(s,hba1c,5.3). tube(s,fbs,fluoride). ' +
+           'tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'release',
+    rule:   'plausible',
+    faults: [] },
+
+  { name: 'Glucose in the HbA1c tube is caught, HbA1c is not blamed',
+    facts: 'value(s,fbs,94). value(s,hba1c,5.3). tube(s,fbs,edta). ' +
+           'tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/wrong_tube'],
+    noteMentions: 'glucose' },
+
+  { name: 'HbA1c in the glucose tube is caught, glucose is not blamed',
+    facts: 'value(s,fbs,94). value(s,hba1c,5.3). tube(s,fbs,fluoride). ' +
+           'tube(s,hba1c,fluoride). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/wrong_tube'],
+    noteMentions: 'HbA1c' },
+
   { name: 'Wrong tube is checked against the TEST, not against glucose',
     facts: 'value(s,hba1c,5.9). tube(s,hba1c,plain). delay_hours(s,0). fasting_hours(s,10).',
     action: 'recollect',
@@ -280,6 +306,53 @@ const INVARIANTS = [
       return problems;
     }
   }
+  ,{
+    name: 'only questions relevant to the tests requested are asked',
+    // Regression guard. Glucose and HbA1c need different tubes, so there
+    // must be a tube question per test, and neither may be asked about a
+    // test that was not requested. The fasting window and the separation
+    // time are glucose facts and must not be asked for an HbA1c alone.
+    run: async () => {
+      const problems = [];
+      const ask = async facts => {
+        const s = await load(facts);
+        return (await query(s, 'relevant(Q).', ['Q'])).map(r => r.Q);
+      };
+
+      const hba1cOnly = await ask('value(s,hba1c,5.3).');
+      const fbsOnly   = await ask('value(s,fbs,94).');
+      const both      = await ask('value(s,fbs,94). value(s,hba1c,5.3).');
+
+      const want = (list, q, present, label) => {
+        const has = list.includes(q);
+        if (present && !has) problems.push(`${label}: ${q} should be asked`);
+        if (!present && has) problems.push(`${label}: ${q} should NOT be asked`);
+      };
+
+      want(hba1cOnly, 'tube_hba1c', true,  'HbA1c only');
+      want(hba1cOnly, 'tube_fbs',   false, 'HbA1c only');
+      want(hba1cOnly, 'fasting',    false, 'HbA1c only');
+      want(hba1cOnly, 'delay',      false, 'HbA1c only');
+
+      want(fbsOnly,   'tube_fbs',   true,  'FBS only');
+      want(fbsOnly,   'tube_hba1c', false, 'FBS only');
+      want(fbsOnly,   'fasting',    true,  'FBS only');
+      want(fbsOnly,   'delay',      true,  'FBS only');
+
+      want(both,      'tube_fbs',   true,  'both');
+      want(both,      'tube_hba1c', true,  'both');
+
+      // And there must be no single tube question left that could be
+      // applied to both tests at once.
+      const s = await load('value(s,fbs,94).');
+      const generic = await query(s, "askable(tube, _, _, _).");
+      if (generic.length) {
+        problems.push('a single askable(tube, ...) still exists: one answer ' +
+                      'could be applied to both tests again');
+      }
+      return problems;
+    }
+  }
 ];
 
 // ------------------------------------------------------------------ runner
@@ -344,6 +417,14 @@ async function runCase(c) {
   const rule = pr.length ? pr[0].R : '(no rule recorded)';
   if (c.rule && rule.indexOf(c.rule) === -1) {
     problems.push(`rule: expected one containing "${c.rule}" got "${rule}"`);
+  }
+
+  if (c.noteMentions) {
+    const notes = await query(session, 'fault_note(s, _, N).', ['N']);
+    const text = notes.map(r => r.N).join(' | ');
+    if (text.toLowerCase().indexOf(c.noteMentions.toLowerCase()) === -1) {
+      problems.push(`note: expected it to name "${c.noteMentions}", got "${text}"`);
+    }
   }
 
   if (c.alsoFix) {

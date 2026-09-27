@@ -341,3 +341,5 @@ footer p { margin: 0 0 .5rem; }
   .q { font-size: 1.3rem; }
   .verdict h2 { font-size: 1.5rem; }
 }
+
+.whybody .note { color: var(--faint); font-size: .84rem; }
