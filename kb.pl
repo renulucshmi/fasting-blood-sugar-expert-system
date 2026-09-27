@@ -622,12 +622,69 @@ still_useful(Id) :-
     askable(Id, 5, _, _),
     specimen_compromised(s).
 
-% settled(S, LowestUnaskedRank) - no question still unasked could change the
-% action, because every one of them is ranked worse than what we already have.
+% Which question can establish which fault. The consultation needs this to
+% tell the difference between "I asked and found nothing" and "I never asked".
+establishes(label,       label_mismatch).
+establishes(typed,       transcription_doubt).
+establishes(fasting,     not_fasting).
+establishes(drip,        drip_arm).
+establishes(look,        haemolysed).
+establishes(look,        clotted).
+establishes(look,        lipaemic).
+establishes(tube_fbs,    wrong_tube).
+establishes(tube_hba1c,  wrong_tube).
+establishes(delay,       delayed).
+establishes(qc,          qc_out).
+establishes(lot,         reagent_expired).
+establishes(cal,         calibration_overdue).
+establishes(flag,        probe_clot).
+establishes(flag,        carryover).
+establishes(clean,       not_cleaned).
+
+family(machine).
+family(sample).
+family(collection).
+family(identity).
+
+% A family is fully explored once every question that could establish a fault
+% in it has been asked. The interface passes the rank of the next question it
+% has NOT asked, so anything ranked below that has been answered.
+family_explored(Family, LowestUnasked) :-
+    family(Family),
+    \+ ( fault_family(Cause, Family),
+         establishes(Q, Cause),
+         askable(Q, R, _, _),
+         R >= LowestUnasked ).
+
+% Which families an action's rule requires to be ABSENT. An action resting on
+% one of these cannot be trusted while that family is still unexplored -
+% negation as failure over an incomplete fact base is ignorance, not absence.
+requires_absence_of(correct_entry,     sample).
+requires_absence_of(correct_entry,     collection).
+requires_absence_of(correct_entry,     machine).
+requires_absence_of(rerun_same_sample, sample).
+requires_absence_of(rerun_same_sample, collection).
+requires_absence_of(escalate,        F) :- family(F).
+requires_absence_of(release_comment, F) :- family(F).
+requires_absence_of(release,         F) :- family(F).
+
+% settled(S, LowestUnaskedRank) - it is safe to stop asking.
+%
+% Two conditions, and the second is the one that matters.
+%
+%   1. Nothing still unasked could outrank the action already established.
+%   2. If that action rests on the ABSENCE of a fault, every family it needs
+%      to be absent has actually been looked at.
+%
+% Without the second condition the system stops after two questions on a
+% typing doubt and reports "correct the entry, no new blood needed" without
+% ever looking at the specimen.
 settled(S, LowestUnasked) :-
     decision(S, Action, _),
     action_rank(Action, R),
-    R =< LowestUnasked.
+    R =< LowestUnasked,
+    \+ ( requires_absence_of(Action, Family),
+         \+ family_explored(Family, LowestUnasked) ).
 
 % How the system explains stopping early.
 stopped_early(Asked, Total, Why) :-

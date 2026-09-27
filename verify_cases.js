@@ -183,6 +183,35 @@ const CASES = [
     faults: ['identity/label_mismatch'],
     consistency: 'none' },
 
+  // --- stopping only on evidence, never on ignorance --------------------
+  { name: 'A typing doubt does not settle before the specimen is looked at',
+    // Regression guard. correct_entry is rank 2 and its rule is guarded by
+    // \\+ fault(S, sample, _). After two questions nothing has been ASKED,
+    // so that guard reported absence when the truth was ignorance, and the
+    // system stopped and said "no new blood needed".
+    facts: 'value(s,fbs,94). transcription_doubt(s).',
+    action: 'correct_entry',
+    rule:   'transcription_doubt',
+    faults: ['identity/transcription_doubt'],
+    notSettledAt: 3 },
+
+  { name: 'The same typing doubt settles once everything has been asked',
+    facts: 'value(s,fbs,94). transcription_doubt(s). tube(s,fbs,fluoride). ' +
+           'delay_hours(s,0). fasting_hours(s,10).',
+    action: 'correct_entry',
+    rule:   'transcription_doubt',
+    faults: ['identity/transcription_doubt'],
+    settledAt: 6 },
+
+  { name: 'A typing doubt beside a haemolysed tube is not a typing fix',
+    // The case the early stop would have got wrong: it reported
+    // correct_entry without ever looking at the specimen.
+    facts: 'value(s,fbs,94). transcription_doubt(s). sample_state(s,haemolysed). ' +
+           'tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['identity/transcription_doubt', 'sample/haemolysed'] },
+
   // --- the consultation -------------------------------------------------
   { name: 'Stopping rule: a rank 1 fault settles it against every question',
     facts: `value(s,fbs,310). ${CLEAN} label_mismatch(s).`,
@@ -302,6 +331,55 @@ const INVARIANTS = [
       if (!dec.length || dec[0].A !== 'recollect') {
         problems.push(`expected the decision to become recollect, got ` +
                       `${dec.length ? dec[0].A : 'nothing'}`);
+      }
+      return problems;
+    }
+  }
+  ,{
+    name: 'no action resting on absent evidence settles while unexplored',
+    // Structural guard. For every action whose rule requires a family to be
+    // absent, settled/2 must refuse while any question that could establish
+    // a fault in that family is still unasked.
+    run: async () => {
+      const problems = [];
+      const s = await load('value(s,fbs,94).');
+
+      const pairs = await query(s, 'requires_absence_of(A, F).', ['A', 'F']);
+      if (!pairs.length) {
+        return ['requires_absence_of/2 is empty: nothing is protected from ' +
+                'stopping on absent evidence'];
+      }
+
+      // Every action whose rule contains a negated fault/3 must appear.
+      for (const a of ['correct_entry', 'rerun_same_sample', 'escalate',
+                       'release_comment', 'release']) {
+        if (!pairs.some(p => p.A === a)) {
+          problems.push(`${a} has a negated guard but no requires_absence_of/2 entry`);
+        }
+      }
+
+      // Every cause in the table must be reachable by some question, or
+      // family_explored/2 would call a family explored that never can be.
+      const causes = (await query(s, 'fault_family(C, _).', ['C'])).map(r => r.C);
+      for (const c of causes) {
+        const est = await query(s, `establishes(_, ${c}).`);
+        if (!est.length) {
+          problems.push(`${c} is in the table but no question establishes it`);
+        }
+      }
+
+      // And the behaviour itself: a typing doubt must not settle at rank 3.
+      const early = await load('value(s,fbs,94). transcription_doubt(s).');
+      await query(early, 'forward_chain.');
+      const dec = await query(early, 'decision(s, A, _).', ['A']);
+      if (dec.length && dec[0].A === 'correct_entry') {
+        const stops = await query(early, 'settled(s, 3).');
+        if (stops.length) {
+          problems.push('correct_entry settled at rank 3 with the sample family ' +
+                        'unexplored: the system would stop without looking at the tube');
+        }
+      } else {
+        problems.push(`expected correct_entry, got ${dec.length ? dec[0].A : 'nothing'}`);
       }
       return problems;
     }
