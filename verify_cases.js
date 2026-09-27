@@ -792,6 +792,203 @@ const INVARIANTS = [
   }
 ];
 
+// ------------------------------------------------- integration: consultations
+//
+// Everything above loads facts straight into Prolog. That is the right way to
+// test a rule, but it skips the whole consultation: which questions get asked,
+// in what order, when it stops, and whether an answer becomes a fact at all.
+//
+// A question whose answer was thrown away passed the entire unit suite,
+// because the unit suite never answers a question. These drive the real
+// thing - the real kb.pl, the real question order, and the real ASSERTS table
+// lifted out of app.js - with no browser and no dependencies.
+
+// Lift the answer-to-fact table out of app.js rather than restating it here.
+// A copy would drift, and drift is the bug this section exists to catch.
+const ASSERTS = (() => {
+  const start = APP_JS.indexOf('var ASSERTS = {');
+  const end   = APP_JS.indexOf('};', start) + 2;
+  if (start < 0) throw new Error('could not find the ASSERTS table in app.js');
+  // eslint-disable-next-line no-new-func
+  return new Function(APP_JS.slice(start, end) + ' return ASSERTS;')();
+})();
+
+// What a technologist answers when nothing is wrong. Scenarios override only
+// what they are about, so each one reads as its own story.
+const CLEAN_ANSWERS = {
+  label: 'yes', typed: 'no', drip: 'no', look: 'normal', flag: 'none',
+  qc: 'yes', lot: 'yes', cal: 'yes', clean: 'yes',
+  tube_fbs: 'fluoride', tube_hba1c: 'edta', method: 'boronate',
+  fasting: 10, delay: 0
+};
+
+async function consult(values, answers, continueAfterSettled) {
+  const given = Object.assign({}, CLEAN_ANSWERS, answers);
+  const asked = [];
+  const facts = [];
+  let offered = false;
+
+  for (const [test, v] of Object.entries(values)) {
+    facts.push(`value(s, ${test}, ${v}).`);
+  }
+  const factText = () => facts.join('\n');
+
+  // The question list, exactly as the interface builds it.
+  const setup = await load(factText());
+  const askables = await query(setup, 'askable(I, R, K, Q).', ['I', 'R', 'K', 'Q']);
+  const relevant = new Set((await query(setup, 'relevant(I).', ['I'])).map(r => r.I));
+  const rank = {};
+  askables.forEach(a => { rank[a.I] = +a.R; });
+  const order = askables
+    .map(a => a.I)
+    .filter(id => relevant.has(id))
+    .sort((a, b) => rank[a] - rank[b]);
+
+  let at = 0, extra = false;
+  for (let guard = 0; guard < 40; guard++) {
+    if (at >= order.length) break;
+
+    const s = await load(factText());
+    await query(s, 'forward_chain.');
+    const settled = (await query(s, `settled(s, ${rank[order[at]]}).`)).length > 0;
+    const useful = new Set((await query(s, 'still_useful(Q).', ['Q'])).map(r => r.Q));
+    const usefulLeft = order.slice(at).filter(id => useful.has(id));
+
+    if (settled && !extra) {
+      if (usefulLeft.length) {
+        offered = true;
+        if (!continueAfterSettled) break;
+        extra = true;
+        continue;
+      }
+      break;
+    }
+    if (settled && extra) {
+      if (!usefulLeft.length) break;
+      while (at < order.length && !useful.has(order[at])) at++;
+      if (at >= order.length) break;
+    }
+
+    const id = order[at];
+    if (!(id in given)) throw new Error(`scenario has no answer for "${id}"`);
+    asked.push(id);
+    const fact = ASSERTS[id] ? ASSERTS[id](given[id]) : '';
+    if (fact) facts.push(fact);
+    at++;
+  }
+
+  const fin = await load(factText());
+  await query(fin, 'forward_chain.');
+  const dec = await query(fin, 'decision(s, A, _).', ['A']);
+  const faults = [...new Set((await query(fin, 'fault(s, F, C).', ['F', 'C']))
+    .map(r => r.F + '/' + r.C))].sort();
+
+  return { asked, offered, total: order.length,
+           action: dec.length ? dec[0].A : '(none)', faults };
+}
+
+const JOURNEYS = [
+  { name: 'A label mismatch is settled by one question',
+    values: { fbs: 310 },
+    answers: { label: 'no' },
+    expectAsked: ['label'],
+    expectAction: 'recollect_urgent' },
+
+  { name: 'A clean glucose is asked everything and released',
+    values: { fbs: 94 },
+    expectAsked: ['label', 'typed', 'fasting', 'drip', 'look', 'tube_fbs',
+                  'delay', 'qc', 'lot', 'cal', 'flag', 'clean'],
+    expectAction: 'release' },
+
+  { name: 'An HbA1c alone is never asked about fasting or separation',
+    values: { hba1c: 5.3 },
+    expectNotAsked: ['fasting', 'delay', 'tube_fbs'],
+    expectAsked: ['label', 'typed', 'drip', 'look', 'tube_hba1c', 'method',
+                  'qc', 'lot', 'cal', 'flag', 'clean'],
+    expectAction: 'release' },
+
+  { name: 'A full panel is asked about both tubes and released',
+    values: { fbs: 94, hba1c: 5.3 },
+    expectAskedIncludes: ['tube_fbs', 'tube_hba1c', 'method'],
+    expectAction: 'release' },
+
+  { name: 'A wrong tube settles before the analyser questions',
+    values: { fbs: 61 },
+    answers: { tube_fbs: 'plain' },
+    expectAsked: ['label', 'typed', 'fasting', 'drip', 'look', 'tube_fbs'],
+    expectOffered: true,
+    expectAction: 'recollect' },
+
+  { name: 'Accepting the offer asks the analyser questions too',
+    values: { fbs: 61 },
+    answers: { tube_fbs: 'plain', clean: 'no' },
+    continueAfterSettled: true,
+    expectAskedIncludes: ['qc', 'lot', 'cal', 'flag', 'clean'],
+    expectAction: 'recollect' },
+
+  { name: 'A typing doubt alone is asked everything before it is believed',
+    values: { fbs: 94 },
+    answers: { typed: 'yes' },
+    expectAskedCount: 12,
+    expectAction: 'correct_entry' },
+
+  { name: 'A typing doubt beside a haemolysed tube is not a typing fix',
+    values: { fbs: 94 },
+    answers: { typed: 'yes', look: 'haemolysed' },
+    expectAction: 'recollect' },
+
+  { name: 'A failed control re-runs without bleeding the patient again',
+    values: { fbs: 61 },
+    answers: { qc: 'no' },
+    expectAskedIncludes: ['qc'],
+    expectOffered: false,
+    expectAction: 'rerun_same_sample' },
+
+  { name: 'An impossible glucose reaches the senior',
+    values: { fbs: 12 },
+    expectAction: 'escalate' },
+
+  { name: 'An HbA1c below the assay floor reaches the senior',
+    values: { hba1c: 1.5 },
+    expectAction: 'escalate' },
+
+  { name: 'A patient who had not fasted is re-bled and told why',
+    values: { fbs: 140 },
+    answers: { fasting: 3 },
+    expectAction: 'recollect_teach' }
+];
+
+async function runJourney(j) {
+  const problems = [];
+  const r = await consult(j.values, j.answers || {}, j.continueAfterSettled || false);
+
+  if (j.expectAction && r.action !== j.expectAction) {
+    problems.push(`action: expected ${j.expectAction} got ${r.action}`);
+  }
+  if (j.expectAsked) {
+    const got = r.asked.join(' > ');
+    const want = j.expectAsked.join(' > ');
+    if (got !== want) problems.push(`questions asked:\n        expected ${want}\n        got      ${got}`);
+  }
+  if (j.expectAskedIncludes) {
+    for (const q of j.expectAskedIncludes) {
+      if (!r.asked.includes(q)) problems.push(`"${q}" should have been asked, was not`);
+    }
+  }
+  if (j.expectNotAsked) {
+    for (const q of j.expectNotAsked) {
+      if (r.asked.includes(q)) problems.push(`"${q}" should NOT have been asked`);
+    }
+  }
+  if (j.expectAskedCount !== undefined && r.asked.length !== j.expectAskedCount) {
+    problems.push(`asked ${r.asked.length} questions, expected ${j.expectAskedCount}`);
+  }
+  if (j.expectOffered !== undefined && r.offered !== j.expectOffered) {
+    problems.push(`offer screen: expected ${j.expectOffered}, got ${r.offered}`);
+  }
+  return { problems, asked: r.asked.length, total: r.total, action: r.action };
+}
+
 // ------------------------------------------------------------------ runner
 
 function query(session, goal, vars) {
@@ -942,6 +1139,22 @@ async function runCase(c) {
     problems.forEach(p => console.log(`      >>> ${p}`));
   }
 
+  for (const j of JOURNEYS) {
+    let r;
+    try {
+      r = await runJourney(j);
+    } catch (e) {
+      console.log(`\nFAIL  [consultation] ${j.name}\n      ${e.message}`);
+      failed++;
+      continue;
+    }
+    const ok = r.problems.length === 0;
+    if (!ok) failed++;
+    console.log(`\n${ok ? 'pass' : 'FAIL'}  [consultation] ${j.name}`);
+    console.log(`      asked ${r.asked} of ${r.total} questions -> ${r.action}`);
+    r.problems.forEach(p => console.log(`      >>> ${p}`));
+  }
+
   for (const c of CASES) {
     let r;
     try {
@@ -961,7 +1174,7 @@ async function runCase(c) {
   }
 
   console.log('\n' + '='.repeat(78));
-  const total = CASES.length + INVARIANTS.length;
+  const total = CASES.length + INVARIANTS.length + JOURNEYS.length;
   console.log(`${total - failed} of ${total} passed` +
               (failed ? `, ${failed} FAILED` : ''));
   process.exit(failed ? 1 : 0);
