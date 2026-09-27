@@ -103,6 +103,26 @@ const CASES = [
     faults: ['sample/wrong_tube'],
     noteMentions: 'HbA1c' },
 
+  { name: 'A haemolysed HbA1c no longer produces invented doubt',
+    // Regression guard. fault_effect(haemolysed, hba1c, unclear, 'interferes
+    // with some HbA1c methods') fired for every haemolysed HbA1c whatever
+    // method the laboratory runs, so the system reported "cannot be judged
+    // either way" about results the method may not be affected by at all.
+    facts: 'value(s,hba1c,9.1). tube(s,hba1c,edta). delay_hours(s,0). ' +
+           'fasting_hours(s,10). sample_state(s,haemolysed).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/haemolysed'],
+    consistency: 'unrecorded_effect' },
+
+  { name: 'A known method is named in the reasoning',
+    facts: 'value(s,hba1c,9.1). tube(s,hba1c,edta). delay_hours(s,0). ' +
+           'fasting_hours(s,10). sample_state(s,haemolysed). hba1c_method(s,boronate).',
+    action: 'recollect',
+    rule:   'fault(S, sample, Cause)',
+    faults: ['sample/haemolysed'],
+    mentionsMethod: 'boronate affinity' },
+
   { name: 'Wrong tube is checked against the TEST, not against glucose',
     facts: 'value(s,hba1c,5.9). tube(s,hba1c,plain). delay_hours(s,0). fasting_hours(s,10).',
     action: 'recollect',
@@ -393,6 +413,89 @@ const INVARIANTS = [
       if (!dec.length || dec[0].A !== 'recollect') {
         problems.push(`expected the decision to become recollect, got ` +
                       `${dec.length ? dec[0].A : 'nothing'}`);
+      }
+      return problems;
+    }
+  }
+  ,{
+    name: 'no HbA1c direction is claimed without a method to justify it',
+    // Structural guard. Every fault_effect on hba1c must either be a plain
+    // fact the source supports, or come through the method lookup. A blanket
+    // "some methods interfere" claim is what this test exists to prevent.
+    run: async () => {
+      const problems = [];
+
+      // With no method recorded, an HbA1c fault must produce a gap report
+      // and must NOT produce a direction.
+      const noMethod = await load(
+        'value(s,hba1c,9.1). tube(s,hba1c,edta). delay_hours(s,0). ' +
+        'fasting_hours(s,10). sample_state(s,haemolysed).');
+      await query(noMethod, 'forward_chain.');
+
+      const dir = await query(noMethod, 'direction_unknown(s, hba1c, _, _).');
+      if (dir.length) {
+        problems.push('an HbA1c interference was claimed with no method recorded: ' +
+                      'the blanket "some methods" claim is back');
+      }
+      const gap = await query(noMethod, 'unrecorded_effect(s, hba1c, _, _).');
+      if (!gap.length) {
+        problems.push('no method recorded and no gap reported: the system is silent ' +
+                      'where it should say what it is missing');
+      }
+      const asks = await query(noMethod, 'method_not_recorded(s, _).');
+      if (!asks.length) {
+        problems.push('the system did not say that the HbA1c method is missing');
+      }
+
+      // And with a method recorded, it must say which.
+      const withMethod = await load(
+        'value(s,hba1c,9.1). tube(s,hba1c,edta). delay_hours(s,0). ' +
+        'fasting_hours(s,10). sample_state(s,haemolysed). hba1c_method(s,hplc).');
+      await query(withMethod, 'forward_chain.');
+      const named = await query(withMethod, 'method_in_use(s, W).', ['W']);
+      if (!named.length) problems.push('a recorded method was not named in the reasoning');
+      const stillAsking = await query(withMethod, 'method_not_recorded(s, _).');
+      if (stillAsking.length) {
+        problems.push('the method was recorded but the system still says it is missing');
+      }
+
+      // The method question must only be asked when an HbA1c was requested.
+      const fbsOnly = await load('value(s,fbs,94).');
+      const qs = (await query(fbsOnly, 'relevant(Q).', ['Q'])).map(r => r.Q);
+      if (qs.includes('method')) {
+        problems.push('the HbA1c method was asked about on a glucose-only request');
+      }
+      const withA1c = await load('value(s,hba1c,5.3).');
+      const qs2 = (await query(withA1c, 'relevant(Q).', ['Q'])).map(r => r.Q);
+      if (!qs2.includes('method')) {
+        problems.push('the HbA1c method was not asked about on an HbA1c request');
+      }
+      return problems;
+    }
+  }
+  ,{
+    name: 'every question the knowledge base asks can be answered',
+    // Regression guard. askable/4 declared a question the interface had no
+    // way to turn into a fact, so the user answered it and nothing was
+    // recorded - the system then reported the information as missing.
+    run: async () => {
+      const problems = [];
+      const s = await load('value(s,fbs,94). value(s,hba1c,5.3).');
+      const ids = (await query(s, 'askable(I, _, _, _).', ['I'])).map(r => r.I);
+
+      // The ASSERTS table in app.js is what turns an answer into a fact.
+      const block = APP_JS.slice(APP_JS.indexOf('var ASSERTS'),
+                                 APP_JS.indexOf('function facts()'));
+      for (const id of ids) {
+        if (!new RegExp('\\b' + id + '\\s*:').test(block)) {
+          problems.push(`askable "${id}" has no entry in the ASSERTS table: the ` +
+                        `question is asked but the answer is thrown away`);
+        }
+        const opts = await query(s, `option(${id}, _, _).`);
+        const num  = await query(s, `askable(${id}, _, number, _).`);
+        if (!opts.length && !num.length) {
+          problems.push(`askable "${id}" offers no options and is not a number question`);
+        }
       }
       return problems;
     }
@@ -755,6 +858,14 @@ async function runCase(c) {
   const rule = pr.length ? pr[0].R : '(no rule recorded)';
   if (c.rule && rule.indexOf(c.rule) === -1) {
     problems.push(`rule: expected one containing "${c.rule}" got "${rule}"`);
+  }
+
+  if (c.mentionsMethod) {
+    const m = await query(session, 'method_in_use(s, W).', ['W']);
+    const text = m.map(r => r.W).join(' | ');
+    if (text.indexOf(c.mentionsMethod) === -1) {
+      problems.push(`method: expected the reasoning to name "${c.mentionsMethod}", got "${text}"`);
+    }
   }
 
   if (c.noteMentions) {

@@ -121,6 +121,9 @@
     // wrong and the panel can never be released.
     tube_fbs:   function (v) { return 'tube(s, fbs, ' + v + ').'; },
     tube_hba1c: function (v) { return 'tube(s, hba1c, ' + v + ').'; },
+    method:     function (v) {
+                  return v === 'unknown' ? '' : 'hba1c_method(s, ' + v + ').';
+                },
     fasting: function (v) { return 'fasting_hours(s, ' + v + ').'; },
     delay:   function (v) { return 'delay_hours(s, ' + v + ').'; }
   };
@@ -299,8 +302,9 @@
             '<p class="count">Settled</p>' +
             '<h2 class="q">' + esc(label) + '</h2>' +
             '<p class="lede">Nothing still unasked can change that. The questions ' +
-              'left are about the analyser. They cannot alter the decision, but they ' +
-              'decide what has to be fixed before the fresh sample is run.</p>' +
+              'left cannot alter the decision, but they decide what has to be put ' +
+              'right before the fresh sample is run, and what the report can say ' +
+              'about this one.</p>' +
             '<div class="opts">' +
               '<button type="button" class="opt" id="goOn">Check the analyser too</button>' +
               '<button type="button" class="opt quiet" id="stopNow">Show the result</button>' +
@@ -335,7 +339,9 @@
       { q: 'boundary(B).',                                              vars: ['B'] },
       { q: 'fault_note(s, C, N).',                                      vars: ['C', 'N'] },
       { q: 'unrecorded_effect(s, T, C, W).',                            vars: ['C', 'W'] },
-      { q: 'stopped_early(W).',                                         vars: ['W'] }
+      { q: 'stopped_early(W).',                                         vars: ['W'] },
+      { q: 'method_in_use(s, W).',                                      vars: ['W'] },
+      { q: 'method_not_recorded(s, W).',                                vars: ['W'] }
     ]).then(render).catch(fail);
   }
 
@@ -453,6 +459,10 @@
     unsure.forEach(function (x) { lines.push(['unsure', 'Cannot say', x.W]); });
     uniq(r[14], function (x) { return x.C; })
       .forEach(function (x) { lines.push(['gap', 'Not recorded', x.W]); });
+    // Whether a fault affects an HbA1c depends on the method, so the method
+    // belongs in the reasoning - named when it is known, asked for when not.
+    if (r[16][0]) lines.push(['fits', 'Method', r[16][0].W]);
+    if (r[17][0]) lines.push(['gap', 'Method not recorded', r[17][0].W]);
     real.forEach(function (x)   { lines.push(['real', 'Probably real', x.W]); });
     if (lines.length) {
       h += '<ul class="check">';
