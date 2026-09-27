@@ -393,6 +393,52 @@ const INVARIANTS = [
     }
   }
   ,{
+    name: 'a broken rule is reported, never answered as "release"',
+    // Regression guard for the worst failure mode this system has. The
+    // interface treated a Prolog error exactly like "no solutions", so one
+    // broken rule made the page derive no faults at all and print
+    // "Release the result" on a haemolysed sample, with nothing shown.
+    run: async () => {
+      const problems = [];
+
+      // A knowledge base with one condition rule calling a predicate that
+      // does not exist. Everything else is untouched.
+      const broken = KB.replace(
+        'fault_condition(S, haemolysed) :-\n    sample_state(S, haemolysed).',
+        'fault_condition(S, haemolysed) :-\n    sample_state(S, haemolysed),\n' +
+        '    a_predicate_that_does_not_exist(S).');
+      if (broken === KB) return ['could not break the knowledge base for this test'];
+
+      const facts = 'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). ' +
+                    'fasting_hours(s,10). sample_state(s,haemolysed).';
+
+      const session = await new Promise((resolve, reject) => {
+        const sess = pl.create(400000);
+        sess.consult(broken + '\n' + facts, {
+          success: () => resolve(sess),
+          error: e => reject(pl.format_answer(e))
+        });
+      });
+
+      let raised = false;
+      try {
+        await query(session, 'forward_chain.');
+      } catch (e) {
+        raised = true;
+      }
+      if (!raised) {
+        problems.push('forward_chain over a broken rule did not raise: the ' +
+                      'error is still being swallowed');
+        // and show how bad that is
+        const dec = await query(session, 'decision(s, A, _).', ['A']).catch(() => []);
+        if (dec.length && dec[0].A === 'release') {
+          problems.push('...and the system answered "release" on a haemolysed sample');
+        }
+      }
+      return problems;
+    }
+  }
+  ,{
     name: 'every declared limit is actually consulted by a rule',
     // Structural guard against dead knowledge. impossible_low/2 sat in the
     // knowledge base unread for the whole of the project's life. This sweeps
@@ -591,7 +637,7 @@ const INVARIANTS = [
 // ------------------------------------------------------------------ runner
 
 function query(session, goal, vars) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const rows = [];
     session.query(goal);
     const next = () => session.answer({
@@ -607,8 +653,12 @@ function query(session, goal, vars) {
         next();
       },
       fail:  () => resolve(rows),
-      error: () => resolve(rows),
-      limit: () => resolve(rows)
+      // An error is not an empty result set. Resolving here would let a
+      // broken rule pass the whole suite by quietly producing no faults.
+      error: e => reject(new Error(
+        `goal "${goal}" raised ${pl.format_answer(e)}`)),
+      limit: () => reject(new Error(
+        `goal "${goal}" hit the inference limit - possible loop`))
     });
     next();
   });

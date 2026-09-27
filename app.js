@@ -34,43 +34,65 @@
       session.consult(KB + '\n' + facts, {
         success: function () {
           // Forward chaining first: derive every fault the case supports.
-          ask(session, 'forward_chain.', function () {
-            var out = [], i = 0;
-            (function next() {
-              if (i >= goals.length) return resolve(out);
-              var g = goals[i++];
-              ask(session, g.q, function (rows) { out.push(rows); next(); }, g.vars);
-            })();
-          });
+          ask(session, 'forward_chain.')
+            .then(function () {
+              var out = [], i = 0;
+              return (function next() {
+                if (i >= goals.length) return Promise.resolve(out);
+                var g = goals[i++];
+                return ask(session, g.q, g.vars).then(function (rows) {
+                  out.push(rows);
+                  return next();
+                });
+              })();
+            })
+            .then(resolve, reject);
         },
-        error: function (e) { reject(pl.format_answer(e)); }
+        error: function (e) {
+          reject('The knowledge base would not load.\n\n' + pl.format_answer(e));
+        }
       });
     });
   }
 
-  function ask(session, goal, done, vars) {
-    var rows = [];
-    session.query(goal);
-    (function next() {
-      session.answer({
-        success: function (answer) {
-          if (vars) {
-            var row = {};
-            vars.forEach(function (v) {
-              var t = answer.links[v];
-              row[v] = t === undefined ? null : clean(t.toString());
-            });
-            rows.push(row);
-          } else {
-            rows.push(true);
+  // A Prolog error and "no solutions" are different things, and treating them
+  // the same is how a broken rule ends up showing "Release the result": the
+  // reasoner throws, the interface sees an empty list, and the page reports
+  // that no fault was found. Only `fail` means the goal was proved false.
+  function ask(session, goal, vars) {
+    return new Promise(function (resolve, reject) {
+      var rows = [];
+      session.query(goal);
+      (function next() {
+        session.answer({
+          success: function (answer) {
+            if (vars) {
+              var row = {};
+              vars.forEach(function (v) {
+                var t = answer.links[v];
+                row[v] = t === undefined ? null : clean(t.toString());
+              });
+              rows.push(row);
+            } else {
+              rows.push(true);
+            }
+            next();
+          },
+          fail: function () { resolve(rows); },
+          error: function (err) {
+            reject('Proving this goal raised an error, so no answer can be\n' +
+                   'trusted. Nothing has been released.\n\n' +
+                   '  goal:  ' + goal + '\n' +
+                   '  error: ' + pl.format_answer(err));
+          },
+          limit: function () {
+            reject('The reasoner ran out of inferences proving this goal.\n' +
+                   'The knowledge base may contain a loop.\n\n' +
+                   '  goal: ' + goal);
           }
-          next();
-        },
-        fail: function () { done(rows); },
-        error: function () { done(rows); },
-        limit: function () { done(rows); }
-      });
-    })();
+        });
+      })();
+    });
   }
 
   function clean(s) {
