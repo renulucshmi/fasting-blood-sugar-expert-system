@@ -187,68 +187,115 @@ delta_limit(hba1c, 2.0).
 
 % ----------------------------------------------------------------------------
 %  6.  RULES  -  finding the faults
-%      fault(Sample, Family, Cause)
+%      fault_holds(Sample, Family, Cause)
+%
+%      These are the CONDITIONS. They are not the faults themselves - the
+%      forward-chaining cycle in section 7 reads them and asserts fault/3.
 % ----------------------------------------------------------------------------
 
 % --- machine family ---
-fault(S, machine, qc_out) :-
+fault_holds(S, machine, qc_out) :-
     qc_status(S, _, out_of_range).
-fault(S, machine, reagent_expired) :-
+fault_holds(S, machine, reagent_expired) :-
     reagent_lot(S, _, expired).
-fault(S, machine, calibration_overdue) :-
+fault_holds(S, machine, calibration_overdue) :-
     calibration(S, _, overdue).
-fault(S, machine, probe_clot) :-
+fault_holds(S, machine, probe_clot) :-
     analyser_flag(S, probe_clot).
-fault(S, machine, carryover) :-
+fault_holds(S, machine, carryover) :-
     analyser_flag(S, carryover).
-fault(S, machine, not_cleaned) :-
+fault_holds(S, machine, not_cleaned) :-
     instrument_clean(S, no).
 
 % --- sample family ---
-fault(S, sample, haemolysed) :-
+fault_holds(S, sample, haemolysed) :-
     sample_state(S, haemolysed).
-fault(S, sample, clotted) :-
+fault_holds(S, sample, clotted) :-
     sample_state(S, clotted).
-fault(S, sample, lipaemic) :-
+fault_holds(S, sample, lipaemic) :-
     sample_state(S, lipaemic).
-fault(S, sample, wrong_tube) :-
+fault_holds(S, sample, wrong_tube) :-
     value(S, Test, _),
     tube(S, Test, Used),
     proper_tube(Test, Proper),
     Used \== Proper.
-fault(S, sample, delayed) :-
+fault_holds(S, sample, delayed) :-
     value(S, fbs, _),
     delay_hours(S, D),
     max_delay_hours(fbs, M),
     D > M.
 
 % --- collection family ---
-fault(S, collection, not_fasting) :-
+fault_holds(S, collection, not_fasting) :-
     value(S, fbs, _),
     fasting_hours(S, H),
     min_fasting_hours(Min),
     H < Min.
-fault(S, collection, drip_arm) :-
+fault_holds(S, collection, drip_arm) :-
     drip_arm(S).
 
 % --- identity family ---
-fault(S, identity, label_mismatch) :-
+fault_holds(S, identity, label_mismatch) :-
     label_mismatch(S).
-fault(S, identity, transcription_doubt) :-
+fault_holds(S, identity, transcription_doubt) :-
     transcription_doubt(S).
 
 
 % ----------------------------------------------------------------------------
-%  7.  RULES  -  is the blood in the tube still usable?
-%      This single question decides whether the patient is bled again.
+%  7.  FORWARD CHAINING  -  the recognise-act cycle
+%
+%  Everything above this point is a condition. Nothing is a fault until this
+%  cycle says so.
+%
+%  The cycle looks for one rule whose conditions already hold and whose
+%  conclusion is not yet in the fact base, asserts that conclusion, and starts
+%  again. It stops when a whole pass adds nothing - quiescence. That is
+%  forward chaining: data in, conclusions out, driven by the facts rather
+%  than by a goal.
+%
+%  It chains two levels deep. A derived fault/3 is itself the condition that
+%  fires specimen_compromised/1, so the second conclusion could not have been
+%  reached without the first.
+%
+%  This is how a laboratory actually works. The QC log, the reagent expiry and
+%  the calibration date are known before anyone looks at the result - so the
+%  faults are established first, and only then does the system reason backward
+%  from "what should we do?" through decision/3.
 % ----------------------------------------------------------------------------
 
-specimen_compromised(S) :-
-    fault(S, sample, _).
-specimen_compromised(S) :-
-    fault(S, collection, _).
-specimen_compromised(S) :-
-    fault(S, identity, label_mismatch).
+:- dynamic(fault/3).
+:- dynamic(specimen_compromised/1).
+
+% fires(Conclusion) - one rule that is ready to fire and has not fired yet.
+
+% Level 1: a condition in section 6 holds, and this fault is not yet known.
+fires(fault(S, Fam, Cause)) :-
+    fault_holds(S, Fam, Cause),
+    \+ fault(S, Fam, Cause).
+
+% Level 2: a fault DERIVED at level 1 is the condition for this one.
+fires(specimen_compromised(S)) :-
+    fault(S, Fam, Cause),
+    compromises_specimen(Fam, Cause),
+    \+ specimen_compromised(S).
+
+compromises_specimen(sample,     _).
+compromises_specimen(collection, _).
+compromises_specimen(identity,   label_mismatch).
+
+% The cycle itself. Recurses while anything still fires; the second clause is
+% quiescence - nothing left to conclude.
+forward_chain :-
+    fires(New),
+    !,
+    assertz(New),
+    forward_chain.
+forward_chain.
+
+% Clear everything the cycle derived, so a new case starts from nothing.
+reset_derived :-
+    retractall(fault(_, _, _)),
+    retractall(specimen_compromised(_)).
 
 specimen_intact(S) :-
     \+ specimen_compromised(S).
@@ -466,8 +513,12 @@ direction_unknown(S, Test, Cause, Why) :-
 
 % Abnormal, nothing found pushes it that way, and nothing found is unpredictable
 % either. The abnormality belongs to the patient until something proves otherwise.
+%
+% Unless the label does not match. Then we do not know WHOSE value it is, so
+% "treat it as the patient's own" would be exactly the wrong advice.
 unaccounted(S, Test, Why) :-
     abnormal(S, Test, Seen),
+    \+ fault(S, identity, label_mismatch),
     \+ accounts_for(S, Test, _, _),
     \+ direction_unknown(S, Test, _, _),
     seen_word(Seen, SW),
@@ -482,3 +533,124 @@ unaccounted(S, Test, Why) :-
 % ----------------------------------------------------------------------------
 
 boundary('This system decides whether a result is fit to leave the laboratory. It does not interpret what the result means for the patient - that is the clinician''s work.').
+
+
+% ----------------------------------------------------------------------------
+%  13.  THE CONSULTATION  -  what the system may ask, and when it may stop
+%
+%  The system does not show a form. It asks one question at a time, and it
+%  asks as few as it can.
+%
+%  Each question carries the RANK of the best action it could establish -
+%  the same ranking decision/3 uses. Questions are asked in rank order, so
+%  the moment a fault is derived at rank R, every question still unasked
+%  could only produce an action ranked worse than R, and none of them can
+%  change the answer. settled/2 below is that argument, written as a rule.
+%
+%  This is why the ranking exists. It orders the actions, and ordering the
+%  actions orders the questions.
+% ----------------------------------------------------------------------------
+
+% askable(Id, Rank, Kind, Question).   Kind is yn, choice or number.
+askable(label,   1, yn,     'Does the label on the tube match the request form?').
+askable(typed,   2, yn,     'Any doubt about what was typed into the system?').
+askable(fasting, 3, number, 'How many hours had the patient fasted?').
+askable(drip,    3, yn,     'Was the blood drawn from the arm with the drip?').
+askable(look,    4, choice, 'How does the sample look?').
+askable(tube,    4, choice, 'Which tube was the sample drawn into?').
+askable(delay,   4, number, 'How many hours before the plasma was separated?').
+askable(qc,      5, yn,     'Did the quality control for this run pass?').
+askable(lot,     5, yn,     'Is the reagent lot within its expiry date?').
+askable(cal,     5, yn,     'Is the calibration current?').
+askable(flag,    5, choice, 'Did the analyser raise a flag on this sample?').
+askable(clean,   5, yn,     'Was the analyser cleaned as scheduled?').
+
+% option(QuestionId, Value, Shown).   Order here is the order on screen.
+option(label, yes, 'Yes, it matches').
+option(label, no,  'No, it does not').
+option(typed, no,  'No doubt').
+option(typed, yes, 'Yes, there is doubt').
+option(drip,  no,  'No').
+option(drip,  yes, 'Yes').
+option(look,  normal,     'Normal').
+option(look,  haemolysed, 'Haemolysed').
+option(look,  clotted,    'Clotted').
+option(look,  lipaemic,   'Lipaemic').
+option(tube,  fluoride, 'Fluoride oxalate').
+option(tube,  edta,     'EDTA').
+option(tube,  plain,    'Plain').
+option(tube,  heparin,  'Heparin').
+option(flag,  none,       'None').
+option(flag,  probe_clot, 'Probe clot').
+option(flag,  carryover,  'Carryover').
+option(qc,    yes, 'Passed').
+option(qc,    no,  'Out of range').
+option(lot,   yes, 'Within expiry').
+option(lot,   no,  'Expired').
+option(cal,   yes, 'Current').
+option(cal,   no,  'Overdue').
+option(clean, yes, 'Yes').
+option(clean, no,  'No').
+
+% unit(QuestionId, Unit) - for the number questions.
+unit(fasting, hours).
+unit(delay,   hours).
+
+% Which questions, if any, still matter once the decision is settled. A
+% machine fault cannot change a recollection, but it still has to be fixed
+% before the fresh sample is run - see also_fix/2.
+still_useful(Id) :-
+    askable(Id, 5, _, _),
+    specimen_compromised(s).
+
+% settled(S, LowestUnaskedRank) - no question still unasked could change the
+% action, because every one of them is ranked worse than what we already have.
+settled(S, LowestUnasked) :-
+    decision(S, Action, _),
+    action_rank(Action, R),
+    R =< LowestUnasked.
+
+% How the system explains stopping early.
+stopped_early(Asked, Total, Why) :-
+    decision(s, Action, _),
+    action_label(Action, Label),
+    atom_concat('Stopped after ', Asked, A),
+    atom_concat(A, ' of ', B),
+    atom_concat(B, Total, C),
+    atom_concat(C, ' questions: nothing still unasked can rank above ', D),
+    atom_concat(D, Label, Why).
+
+
+% ----------------------------------------------------------------------------
+%  14.  THE EXPLANATION CHAIN
+%
+%  User Input -> Facts -> Rules Applied -> Reasoning -> Final Conclusion.
+%  The first four are already in the system; this section names the rule that
+%  produced each action, so the chain can be shown complete rather than
+%  jumping from facts straight to a conclusion.
+% ----------------------------------------------------------------------------
+
+producing_rule(recollect_urgent,
+  'possible_action(S, recollect_urgent, _) :- fault(S, identity, label_mismatch).').
+producing_rule(correct_entry,
+  'possible_action(S, correct_entry, _) :- fault(S, identity, transcription_doubt), \\+ fault(S, sample, _), \\+ fault(S, collection, _), \\+ fault(S, machine, _).').
+producing_rule(recollect_teach,
+  'possible_action(S, recollect_teach, _) :- fault(S, collection, Cause), instruction(Cause, _).').
+producing_rule(recollect,
+  'possible_action(S, recollect, _) :- fault(S, sample, Cause).').
+producing_rule(rerun_same_sample,
+  'possible_action(S, rerun_same_sample, _) :- fault(S, machine, Cause), specimen_intact(S).').
+producing_rule(escalate,
+  'possible_action(S, escalate, _) :- \\+ fault(S, _, _), implausible(S, _, _).').
+producing_rule(release_comment,
+  'possible_action(S, release_comment, _) :- \\+ fault(S, _, _), delta_fail(S, _, _).').
+producing_rule(release,
+  'possible_action(S, release, _) :- \\+ fault(S, _, _), plausible(S).').
+
+% The rule that fired to derive each fault, and the one that selected the action.
+derivation_rule(fault,
+  'fires(fault(S, Fam, Cause)) :- fault_holds(S, Fam, Cause), \\+ fault(S, Fam, Cause).   [forward chaining]').
+derivation_rule(specimen,
+  'fires(specimen_compromised(S)) :- fault(S, Fam, Cause), compromises_specimen(Fam, Cause).   [forward chaining, level 2]').
+derivation_rule(selection,
+  'decision(S, Action, Why) :- possible_action(S, Action, Why), action_rank(Action, R), \\+ ( possible_action(S, Other, _), action_rank(Other, R2), R2 < R ).   [backward chaining]').

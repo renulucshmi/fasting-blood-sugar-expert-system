@@ -1,402 +1,499 @@
-/* ===========================================================================
-   app.js  -  Glucose Result Release Advisor
-   Interface layer only. Every decision is made by Prolog in kb.pl; this file
-   collects the form, hands it to Tau Prolog, and renders the answer.
-   =========================================================================== */
+/* ---------------------------------------------------------------------------
+   app.js  -  Glucose Result Release Advisor : the interface
+
+   This file makes no decisions. It collects the case, hands it to Tau Prolog,
+   and shows what comes back. Every verdict, every question and every reason on
+   the screen was produced by a rule in kb.pl.
+
+   The consultation asks one question at a time, in the order kb.pl gives, and
+   stops as soon as settled/2 proves that nothing still unasked could change
+   the action.
+
+   Prakasan R.  -  224152U
+   --------------------------------------------------------------------------- */
 
 (function () {
   'use strict';
 
-  var el = function (id) { return document.getElementById(id); };
-  var KB = '';
+  var KB = null;                 // the knowledge base text
+  var S = {};                    // the whole state of one consultation
 
-  // ------------------------------------------------------------------ form
-
-  var FORM = [
-    { group: 'The result', cls: 'res', fields: [
-      { id: 'fbs',      label: 'Fasting blood sugar', kind: 'num', unit: 'mg/dL', step: '1' },
-      { id: 'prev_fbs', label: 'Patient’s last fasting sugar', kind: 'num', unit: 'mg/dL', step: '1',
-        hint: 'optional — used for the delta check' },
-      { id: 'hba1c',      label: 'HbA1c', kind: 'num', unit: '%', step: '0.1' },
-      { id: 'prev_hba1c', label: 'Patient’s last HbA1c', kind: 'num', unit: '%', step: '0.1',
-        hint: 'optional' }
-    ]},
-    { group: 'The run — machine and reagent', cls: 'mach', fields: [
-      { id: 'qc', label: 'Quality control for this run', kind: 'sel',
-        opts: [['in_range', 'In range'], ['out_of_range', 'Out of range'], ['not_checked', 'Not checked']] },
-      { id: 'lot', label: 'Reagent lot', kind: 'sel',
-        opts: [['current', 'Current'], ['expired', 'Past its expiry'], ['unknown', 'Not sure']] },
-      { id: 'cal', label: 'Calibration', kind: 'sel',
-        opts: [['current', 'Current'], ['overdue', 'Overdue, or not redone after maintenance']] },
-      { id: 'flag', label: 'Analyser flag', kind: 'sel',
-        opts: [['none', 'None'], ['probe_clot', 'Probe clot'], ['carryover', 'Carryover']] },
-      { id: 'clean', label: 'Analyser cleaned as scheduled', kind: 'yn', yes: 'Yes', no: 'No' }
-    ]},
-    { group: 'The specimen', cls: 'samp', fields: [
-      { id: 'appearance', label: 'How the sample looks', kind: 'sel',
-        opts: [['ok', 'Normal'], ['haemolysed', 'Haemolysed'], ['clotted', 'Clotted'], ['lipaemic', 'Lipaemic']] },
-      { id: 'tube', label: 'Tube used for the glucose', kind: 'sel',
-        opts: [['fluoride', 'Fluoride oxalate'], ['plain', 'Plain'], ['edta', 'EDTA']] },
-      { id: 'delay', label: 'Hours before the plasma was separated', kind: 'num', unit: 'hours', step: '0.5' }
-    ]},
-    { group: 'How it was collected', cls: 'coll', fields: [
-      { id: 'fasting', label: 'Hours the patient fasted', kind: 'num', unit: 'hours', step: '1' },
-      { id: 'drip', label: 'Drawn from the drip arm', kind: 'yn', yes: 'Yes', no: 'No', invert: true }
-    ]},
-    { group: 'Identification and entry', cls: 'ident', fields: [
-      { id: 'label', label: 'Label matches the request form', kind: 'yn', yes: 'Yes', no: 'No' },
-      { id: 'typed', label: 'Any doubt about what was typed in', kind: 'yn', yes: 'Yes', no: 'No', invert: true }
-    ]},
-    { group: 'Has it been repeated?', cls: 'rep', fields: [
-      { id: 'repeated', label: 'Already repeated', kind: 'yn', yes: 'Yes', no: 'No', invert: true },
-      { id: 'agrees', label: 'The repeat gave the same answer', kind: 'yn', yes: 'Yes', no: 'No', invert: true }
-    ]}
-  ];
-
-  var DEFAULTS = {
-    qc: 'in_range', lot: 'current', cal: 'current', flag: 'none', clean: 'yes',
-    appearance: 'ok', tube: 'fluoride', delay: '0.5', fasting: '9',
-    drip: 'no', label: 'yes', typed: 'no', repeated: 'no', agrees: 'no'
-  };
-
-  var EXAMPLES = {
-    ex1: { name: 'sat 4 hours', vals: { fbs: '61', delay: '4', tube: 'plain' } },
-    ex2: { name: 'QC out', vals: { fbs: '61', qc: 'out_of_range' } },
-    ex3: { name: 'clean', vals: { fbs: '94', hba1c: '5.3' } }
-  };
-
-  function buildForm() {
-    var html = '';
-    FORM.forEach(function (g) {
-      html += '<fieldset class="panel ' + g.cls + '"><legend>' + g.group + '</legend><div class="grid">';
-      g.fields.forEach(function (f) {
-        html += '<div class="cell"><label for="f_' + f.id + '">' + f.label + '</label>';
-        if (f.kind === 'num') {
-          html += '<div class="inputrow">' +
-                    '<input type="number" step="' + f.step + '" id="f_' + f.id + '">' +
-                    '<span class="unit">' + f.unit + '</span></div>';
-        } else if (f.kind === 'sel') {
-          html += '<select id="f_' + f.id + '">';
-          f.opts.forEach(function (o) {
-            html += '<option value="' + o[0] + '">' + o[1] + '</option>';
-          });
-          html += '</select>';
-        } else {
-          html += '<div class="radios">' +
-            '<label class="check"><input type="radio" name="f_' + f.id + '" value="yes"> ' + f.yes + '</label>' +
-            '<label class="check"><input type="radio" name="f_' + f.id + '" value="no"> ' + f.no + '</label>' +
-            '</div>';
-        }
-        if (f.hint) html += '<p class="hint">' + f.hint + '</p>';
-        html += '</div>';
-      });
-      html += '</div></fieldset>';
-    });
-    el('formArea').innerHTML = html;
-  }
-
-  function setField(id, v) {
-    var node = el('f_' + id);
-    if (node) { node.value = v; return; }
-    var radio = document.querySelector('input[name="f_' + id + '"][value="' + v + '"]');
-    if (radio) radio.checked = true;
-  }
-
-  function getField(id) {
-    var node = el('f_' + id);
-    if (node) return node.value.trim();
-    var checked = document.querySelector('input[name="f_' + id + '"]:checked');
-    return checked ? checked.value : '';
-  }
-
-  function resetForm() {
-    FORM.forEach(function (g) {
-      g.fields.forEach(function (f) {
-        setField(f.id, DEFAULTS[f.id] === undefined ? '' : DEFAULTS[f.id]);
-      });
-    });
-  }
-
-  function loadExample(key) {
-    resetForm();
-    var ex = EXAMPLES[key];
-    Object.keys(ex.vals).forEach(function (k) { setField(k, ex.vals[k]); });
-  }
-
-  // ------------------------------------------------------------ case facts
-
-  function num(id) {
-    var raw = getField(id);
-    if (raw === '') return null;
-    var n = parseFloat(raw);
-    return isNaN(n) ? null : n;
-  }
-
-  function fmt(n) { return (n % 1 === 0) ? n.toFixed(1) : String(n); }
-
-  function collectFacts() {
-    var L = [];
-    var fbs = num('fbs'), hba1c = num('hba1c');
-
-    if (fbs !== null) L.push('value(s, fbs, ' + fmt(fbs) + ').');
-    if (hba1c !== null) L.push('value(s, hba1c, ' + fmt(hba1c) + ').');
-    if (num('prev_fbs') !== null) L.push('previous_value(s, fbs, ' + fmt(num('prev_fbs')) + ').');
-    if (num('prev_hba1c') !== null) L.push('previous_value(s, hba1c, ' + fmt(num('prev_hba1c')) + ').');
-
-    var tests = [];
-    if (fbs !== null) tests.push('fbs');
-    if (hba1c !== null) tests.push('hba1c');
-
-    tests.forEach(function (t) {
-      L.push('qc_status(s, ' + t + ', ' + getField('qc') + ').');
-      L.push('reagent_lot(s, ' + t + ', ' + getField('lot') + ').');
-      L.push('calibration(s, ' + t + ', ' + getField('cal') + ').');
-    });
-
-    if (getField('flag') !== 'none') L.push('analyser_flag(s, ' + getField('flag') + ').');
-    if (getField('clean') === 'no') L.push('instrument_clean(s, no).');
-
-    if (getField('appearance') !== 'ok') L.push('sample_state(s, ' + getField('appearance') + ').');
-    if (fbs !== null) L.push('tube(s, fbs, ' + getField('tube') + ').');
-    if (hba1c !== null) L.push('tube(s, hba1c, edta).');
-    if (num('delay') !== null) L.push('delay_hours(s, ' + fmt(num('delay')) + ').');
-    if (num('fasting') !== null) L.push('fasting_hours(s, ' + fmt(num('fasting')) + ').');
-
-    if (getField('drip') === 'yes') L.push('drip_arm(s).');
-    if (getField('label') === 'no') L.push('label_mismatch(s).');
-    if (getField('typed') === 'yes') L.push('transcription_doubt(s).');
-
-    if (getField('repeated') === 'yes' && tests.length) {
-      L.push('repeat_done(s, ' + tests[0] + ').');
-      if (getField('agrees') === 'yes') L.push('repeat_agrees(s, ' + tests[0] + ').');
-    }
-
-    return { text: L.join('\n'), count: tests.length };
-  }
-
-  // --------------------------------------------------------------- Prolog
-
-  function solve(facts, goal, vars) {
-    return new Promise(function (resolve, reject) {
-      var session = pl.create(200000);
-      session.consult(KB + '\n' + facts + '\n', {
-        success: function () {
-          session.query(goal, {
-            success: function () {
-              var rows = [];
-              session.answers(function (a) {
-                if (a === false || a === null) { resolve(rows); return; }
-                if (pl.type.is_error(a)) { reject(a.toString()); return; }
-                var row = {};
-                vars.forEach(function (v) {
-                  var t = a.lookup(v);
-                  row[v] = (t === null) ? null : unq(t.toString());
-                });
-                rows.push(row);
-              }, 400);
-            },
-            error: function (e) { reject('query: ' + e.toString()); }
-          });
-        },
-        error: function (e) { reject('consult: ' + e.toString()); }
-      });
-    });
-  }
-
-  function unq(s) {
-    if (s.length > 1 && s.charAt(0) === "'" && s.charAt(s.length - 1) === "'") {
-      return s.slice(1, -1).replace(/\\'/g, "'");
-    }
-    return s;
-  }
-
-  function dedupe(rows, key) {
-    var seen = {}, out = [];
-    rows.forEach(function (r) { var k = key(r); if (!seen[k]) { seen[k] = true; out.push(r); } });
-    return out;
-  }
-
-  // ------------------------------------------------------------- running
-
-  function run() {
-    var f = collectFacts();
-    if (f.count === 0) {
-      el('result').innerHTML = '<div class="panel empty"><h2>Nothing entered yet</h2>' +
-        '<p>Enter a fasting sugar or an HbA1c, or load one of the examples above.</p></div>';
-      return;
-    }
-    el('result').innerHTML = '<div class="panel"><p class="thinking">Reasoning…</p></div>';
-    var F = f.text;
-
-    Promise.all([
-      solve(F, "decision(s, A, Why), action_label(A, Label).", ['A', 'Why', 'Label']),
-      solve(F, "fault(s, Fam, C), fault_label(C, CL), family_label(Fam, FL).", ['Fam', 'C', 'CL', 'FL']),
-      solve(F, "direction(s, T, C, D, Why), fault_label(C, CL).", ['T', 'C', 'D', 'Why', 'CL']),
-      solve(F, "also_fix(s, Why).", ['Why']),
-      solve(F, "critical(s, T, D), value(s, T, V).", ['T', 'D', 'V']),
-      solve(F, "specimen_intact(s).", []),
-      solve(F, "boundary(B).", ['B']),
-      solve(F, "possible_action(s, A, Why), action_label(A, Label).", ['A', 'Why', 'Label']),
-      solve(F, "accounts_for(s, T, C, Why).", ['T', 'C', 'Why']),
-      solve(F, "does_not_account_for(s, T, C, Why).", ['T', 'C', 'Why']),
-      solve(F, "direction_unknown(s, T, C, Why).", ['T', 'C', 'Why']),
-      solve(F, "unaccounted(s, T, Why).", ['T', 'Why'])
-    ]).then(function (r) {
-      render({
-        decision:  r[0][0] || null,
-        faults:    dedupe(r[1], function (x) { return x.C; }),
-        directions: dedupe(r[2], function (x) { return x.C + x.T; }),
-        alsoFix:   dedupe(r[3], function (x) { return x.Why; }),
-        criticals: dedupe(r[4], function (x) { return x.T + x.D; }),
-        intact:    r[5].length > 0,
-        boundary:  r[6][0] ? r[6][0].B : '',
-        others:    dedupe(r[7], function (x) { return x.A; }),
-        accounts:  dedupe(r[8],  function (x) { return x.C + x.T; }),
-        notAccount: dedupe(r[9], function (x) { return x.C + x.T; }),
-        unknownDir: dedupe(r[10], function (x) { return x.C + x.T; }),
-        unaccounted: dedupe(r[11], function (x) { return x.T; })
-      });
-    }).catch(function (e) {
-      el('result').innerHTML = '<div class="panel bad"><h2>The reasoner reported a problem</h2>' +
-        '<pre>' + String(e) + '</pre></div>';
-    });
-  }
-
+  function el(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  var TONE = {
-    release: 'good', release_comment: 'good',
-    rerun_same_sample: 'rerun',
-    recollect: 'recollect', recollect_teach: 'recollect',
-    recollect_urgent: 'urgent', correct_entry: 'rerun', escalate: 'urgent'
-  };
+  // ------------------------------------------------------------------ Prolog
 
-  function render(r) {
-    var h = '';
-
-    if (r.decision) {
-      var tone = TONE[r.decision.A] || 'good';
-      h += '<section class="verdict ' + tone + '">' +
-             '<p class="verdict-kicker">The laboratory should</p>' +
-             '<h2>' + esc(r.decision.Label) + '</h2>' +
-             '<p class="verdict-why">' + esc(r.decision.Why) + '</p>' +
-           '</section>';
-    }
-
-    // the sentence the whole system exists to produce
-    if (r.faults.length) {
-      h += '<section class="panel needle ' + (r.intact ? 'keep' : 'fresh') + '">' +
-             '<p>' + (r.intact
-               ? '<b>The blood in the tube is still good.</b> The fault is with the analyser, so the patient does not need to be bled again.'
-               : '<b>Fresh blood is needed.</b> The specimen or the way it was collected is at fault, so re-running this tube would only repeat the error.') +
-             '</p></section>';
-    }
-
-    if (r.criticals.length) {
-      h += '<section class="panel critical"><h3>Telephone the clinician</h3><ul>';
-      r.criticals.forEach(function (x) {
-        h += '<li><b>' + esc(x.T === 'fbs' ? 'Fasting sugar' : 'HbA1c') + ' ' + esc(x.V) + '</b> — critically ' + esc(x.D) +
-             '. Once the result is confirmed sound.</li>';
+  // One session per evaluation. The knowledge base asserts as it forward
+  // chains, so each run starts from a clean fact base rather than inheriting
+  // conclusions from the previous question.
+  function run(facts, goals) {
+    return new Promise(function (resolve, reject) {
+      var session = pl.create(400000);
+      session.consult(KB + '\n' + facts, {
+        success: function () {
+          // Forward chaining first: derive every fault the case supports.
+          ask(session, 'forward_chain.', function () {
+            var out = [], i = 0;
+            (function next() {
+              if (i >= goals.length) return resolve(out);
+              var g = goals[i++];
+              ask(session, g.q, function (rows) { out.push(rows); next(); }, g.vars);
+            })();
+          });
+        },
+        error: function (e) { reject(pl.format_answer(e)); }
       });
-      h += '</ul></section>';
-    }
-
-    if (r.faults.length) {
-      var byFam = {};
-      r.faults.forEach(function (x) { (byFam[x.FL] = byFam[x.FL] || []).push(x); });
-      h += '<section class="panel faults"><h3>What was found</h3>';
-      Object.keys(byFam).forEach(function (fam) {
-        h += '<p class="famline"><span class="fampill">' + esc(fam) + '</span></p><ul>';
-        byFam[fam].forEach(function (x) { h += '<li>' + esc(x.CL) + '</li>'; });
-        h += '</ul>';
-      });
-      h += '</section>';
-    } else {
-      h += '<section class="panel faults"><h3>What was found</h3>' +
-           '<p class="ok">No fault found in the run, the specimen, the collection or the entry.</p></section>';
-    }
-
-    if (r.directions.length) {
-      h += '<section class="panel push"><h3>Which way the result was pushed</h3><ul>';
-      r.directions.forEach(function (x) {
-        var word = x.D === 'unclear' ? 'in an unknown direction' : ('too ' + (x.D === 'high' ? 'high' : 'low'));
-        h += '<li><b>' + esc(x.CL) + '</b> pushes the ' +
-             esc(x.T === 'fbs' ? 'sugar' : 'HbA1c') + ' <b>' + word + '</b> — ' + esc(x.Why) + '.</li>';
-      });
-      h += '</ul></section>';
-    }
-
-    // Does the fault actually ACCOUNT for the abnormality? A separate question
-    // from whether the fault exists, and the one that protects a real result
-    // from being written off as a sample problem.
-    var hasCheck = r.accounts.length || r.notAccount.length ||
-                   r.unknownDir.length || r.unaccounted.length;
-    if (hasCheck) {
-      h += '<section class="panel consistency"><h3>Does that explain the result?</h3><ul>';
-      r.accounts.forEach(function (x) {
-        h += '<li class="fits"><b>Consistent.</b> ' + esc(x.Why) + '.</li>';
-      });
-      r.notAccount.forEach(function (x) {
-        h += '<li class="clashes"><b>Does not fit.</b> ' + esc(x.Why) + '.</li>';
-      });
-      r.unknownDir.forEach(function (x) {
-        h += '<li class="unsure"><b>Cannot say.</b> ' + esc(x.Why) + '.</li>';
-      });
-      r.unaccounted.forEach(function (x) {
-        h += '<li class="real"><b>Probably real.</b> ' + esc(x.Why) + '.</li>';
-      });
-      h += '</ul><p class="muted-note">This does not change what to do with the ' +
-           'tube &mdash; only what the report should say about the number.</p></section>';
-    }
-
-    if (r.alsoFix.length) {
-      h += '<section class="panel alsofix"><h3>Do not forget</h3><ul>';
-      r.alsoFix.forEach(function (x) { h += '<li>' + esc(x.Why) + '.</li>'; });
-      h += '</ul></section>';
-    }
-
-    if (r.others.length > 1) {
-      h += '<section class="panel others"><h3>Other actions the rules allowed</h3>' +
-           '<p class="muted-note">Ranked below the one chosen. Shown so the decision can be checked.</p><ul>';
-      r.others.forEach(function (x) {
-        if (r.decision && x.A === r.decision.A) return;
-        h += '<li><b>' + esc(x.Label) + '</b> — ' + esc(x.Why) + '</li>';
-      });
-      h += '</ul></section>';
-    }
-
-    h += '<section class="panel referral"><p>' + esc(r.boundary) + '</p></section>';
-
-    el('result').innerHTML = h;
-    el('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
-  // ---------------------------------------------------------------- start
+  function ask(session, goal, done, vars) {
+    var rows = [];
+    session.query(goal);
+    (function next() {
+      session.answer({
+        success: function (answer) {
+          if (vars) {
+            var row = {};
+            vars.forEach(function (v) {
+              var t = answer.links[v];
+              row[v] = t === undefined ? null : clean(t.toString());
+            });
+            rows.push(row);
+          } else {
+            rows.push(true);
+          }
+          next();
+        },
+        fail: function () { done(rows); },
+        error: function () { done(rows); },
+        limit: function () { done(rows); }
+      });
+    })();
+  }
+
+  function clean(s) {
+    if (s.length > 1 && s.charAt(0) === "'" && s.charAt(s.length - 1) === "'") {
+      s = s.substring(1, s.length - 1);
+    }
+    return s.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+  }
+
+  // ------------------------------------------------------- facts for this case
+
+  // How each answer becomes a Prolog fact. The question text, the options and
+  // the ordering all live in kb.pl; only this translation lives here.
+  var ASSERTS = {
+    label:   function (v) { return v === 'no'  ? 'label_mismatch(s).' : ''; },
+    typed:   function (v) { return v === 'yes' ? 'transcription_doubt(s).' : ''; },
+    drip:    function (v) { return v === 'yes' ? 'drip_arm(s).' : ''; },
+    qc:      function (v) { return v === 'no'  ? 'qc_status(s, fbs, out_of_range).' : ''; },
+    lot:     function (v) { return v === 'no'  ? 'reagent_lot(s, fbs, expired).' : ''; },
+    cal:     function (v) { return v === 'no'  ? 'calibration(s, fbs, overdue).' : ''; },
+    clean:   function (v) { return v === 'no'  ? 'instrument_clean(s, no).' : ''; },
+    look:    function (v) { return v === 'normal' ? '' : 'sample_state(s, ' + v + ').'; },
+    flag:    function (v) { return v === 'none' ? '' : 'analyser_flag(s, ' + v + ').'; },
+    tube:    function (v) {
+               var t = [];
+               if (S.vals.fbs !== null)   t.push('tube(s, fbs, ' + v + ').');
+               if (S.vals.hba1c !== null) t.push('tube(s, hba1c, ' + v + ').');
+               return t.join(' ');
+             },
+    fasting: function (v) { return 'fasting_hours(s, ' + v + ').'; },
+    delay:   function (v) { return 'delay_hours(s, ' + v + ').'; }
+  };
+
+  function facts() {
+    var f = [];
+    if (S.vals.fbs !== null)        f.push('value(s, fbs, ' + S.vals.fbs + ').');
+    if (S.vals.hba1c !== null)      f.push('value(s, hba1c, ' + S.vals.hba1c + ').');
+    if (S.vals.prev_fbs !== null)   f.push('previous_value(s, fbs, ' + S.vals.prev_fbs + ').');
+    if (S.vals.prev_hba1c !== null) f.push('previous_value(s, hba1c, ' + S.vals.prev_hba1c + ').');
+    Object.keys(S.answers).forEach(function (id) {
+      var fact = ASSERTS[id] ? ASSERTS[id](S.answers[id]) : '';
+      if (fact) f.push(fact);
+    });
+    return f.join('\n');
+  }
+
+  // ---------------------------------------------------------------- the flow
+
+  function begin() {
+    var fbs = num('v_fbs'), hba1c = num('v_hba1c');
+    if (fbs === null && hba1c === null) {
+      el('startErr').textContent = 'Enter a fasting sugar or an HbA1c to begin.';
+      return;
+    }
+    el('startErr').textContent = '';
+    S = {
+      vals: { fbs: fbs, hba1c: hba1c,
+              prev_fbs: num('v_prev_fbs'), prev_hba1c: num('v_prev_hba1c') },
+      answers: {}, order: [], at: 0, extra: false, trace: []
+    };
+    run(facts(), [{ q: 'askable(I, R, K, Q).', vars: ['I', 'R', 'K', 'Q'] },
+                  { q: 'option(I, V, L).',     vars: ['I', 'V', 'L'] },
+                  { q: 'unit(I, U).',          vars: ['I', 'U'] }])
+      .then(function (r) {
+        S.questions = {};
+        r[0].forEach(function (a) {
+          S.questions[a.I] = { id: a.I, rank: +a.R, kind: a.K, text: a.Q, opts: [], unit: '' };
+        });
+        r[1].forEach(function (o) {
+          if (S.questions[o.I]) S.questions[o.I].opts.push({ v: o.V, label: o.L });
+        });
+        r[2].forEach(function (u) {
+          if (S.questions[u.I]) S.questions[u.I].unit = u.U;
+        });
+        S.order = Object.keys(S.questions).sort(function (a, b) {
+          return S.questions[a].rank - S.questions[b].rank;
+        });
+        step();
+      })
+      .catch(fail);
+  }
+
+  function num(id) {
+    var v = el(id) && el(id).value.trim();
+    if (!v) return null;
+    var n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+
+  // The heart of the consultation. Before each question, ask Prolog whether
+  // the decision is already settled - that is, whether anything still unasked
+  // could rank above what we have.
+  function step() {
+    if (S.at >= S.order.length) return finish();
+    var nextRank = S.questions[S.order[S.at]].rank;
+    run(facts(), [{ q: 'settled(s, ' + nextRank + ').', vars: null },
+                  { q: 'specimen_compromised(s).',      vars: null }])
+      .then(function (r) {
+        var isSettled = r[0].length > 0;
+        var compromised = r[1].length > 0;
+        if (isSettled && !S.extra) {
+          // A machine fault cannot change a recollection, but it still has to
+          // be fixed before the fresh sample runs. Offer, do not force.
+          var machineLeft = S.order.slice(S.at).some(function (id) {
+            return S.questions[id].rank === 5;
+          });
+          if (compromised && machineLeft) return offerExtra(nextRank);
+          return finish();
+        }
+        if (isSettled && S.extra) {
+          var anyLeft = S.order.slice(S.at).some(function (id) {
+            return S.questions[id].rank === 5;
+          });
+          if (!anyLeft) return finish();
+          while (S.at < S.order.length && S.questions[S.order[S.at]].rank !== 5) S.at++;
+          if (S.at >= S.order.length) return finish();
+        }
+        showQuestion(S.questions[S.order[S.at]]);
+      })
+      .catch(fail);
+  }
+
+  function answer(id, value) {
+    S.answers[id] = value;
+    S.trace.push({ id: id, q: S.questions[id].text, a: shown(id, value) });
+    S.at++;
+    step();
+  }
+
+  function shown(id, value) {
+    var q = S.questions[id];
+    for (var i = 0; i < q.opts.length; i++) {
+      if (q.opts[i].v === value) return q.opts[i].label;
+    }
+    return value + (q.unit ? ' ' + q.unit : '');
+  }
+
+  function back() {
+    if (!S.trace.length) return;
+    var last = S.trace.pop();
+    delete S.answers[last.id];
+    S.at = S.order.indexOf(last.id);
+    step();
+  }
+
+  // -------------------------------------------------------------- the screens
+
+  function screen(html) { el('stage').innerHTML = html; }
+
+  function showQuestion(q) {
+    var n = S.trace.length + 1;
+    var h = '<div class="step">' +
+              '<p class="count">Question ' + n + '</p>' +
+              '<h2 class="q">' + esc(q.text) + '</h2>';
+    if (q.kind === 'number') {
+      h += '<div class="numrow">' +
+             '<input type="number" step="0.5" id="numIn" autocomplete="off">' +
+             '<span class="unit">' + esc(q.unit) + '</span>' +
+             '<button type="button" class="go" id="numGo">Continue</button>' +
+           '</div>';
+    } else {
+      h += '<div class="opts">';
+      q.opts.forEach(function (o) {
+        h += '<button type="button" class="opt" data-v="' + esc(o.v) + '">' +
+               esc(o.label) + '</button>';
+      });
+      h += '</div>';
+    }
+    if (S.trace.length) h += '<button type="button" class="back" id="backBtn">Back</button>';
+    h += '</div>';
+    screen(h);
+
+    if (q.kind === 'number') {
+      var input = el('numIn');
+      input.focus();
+      var send = function () {
+        var v = input.value.trim();
+        if (v === '' || isNaN(parseFloat(v))) { input.focus(); return; }
+        answer(q.id, parseFloat(v));
+      };
+      el('numGo').onclick = send;
+      input.onkeydown = function (e) { if (e.key === 'Enter') send(); };
+    } else {
+      Array.prototype.forEach.call(document.querySelectorAll('.opt'), function (b) {
+        b.onclick = function () { answer(q.id, b.getAttribute('data-v')); };
+      });
+    }
+    if (el('backBtn')) el('backBtn').onclick = back;
+  }
+
+  function offerExtra(nextRank) {
+    run(facts(), [{ q: 'decision(s, A, _), action_label(A, L).', vars: ['L'] }])
+      .then(function (r) {
+        var label = r[0][0] ? r[0][0].L : 'the decision';
+        screen(
+          '<div class="step">' +
+            '<p class="count">Settled</p>' +
+            '<h2 class="q">' + esc(label) + '</h2>' +
+            '<p class="lede">Nothing still unasked can change that. The questions ' +
+              'left are about the analyser &mdash; they cannot alter the decision, but ' +
+              'they decide what has to be fixed before the fresh sample is run.</p>' +
+            '<div class="opts">' +
+              '<button type="button" class="opt" id="goOn">Check the analyser too</button>' +
+              '<button type="button" class="opt quiet" id="stopNow">Show the result</button>' +
+            '</div>' +
+          '</div>');
+        el('goOn').onclick = function () { S.extra = true; step(); };
+        el('stopNow').onclick = finish;
+      })
+      .catch(fail);
+  }
+
+  var TONE = {
+    release: 'ok', release_comment: 'ok', rerun_same_sample: 'rerun',
+    recollect: 'fresh', recollect_teach: 'fresh', recollect_urgent: 'urgent',
+    correct_entry: 'rerun', escalate: 'urgent'
+  };
+
+  function finish() {
+    run(facts(), [
+      { q: 'decision(s, A, W), action_label(A, L).',                    vars: ['A', 'W', 'L'] },
+      { q: 'fault(s, F, C), fault_label(C, CL), family_label(F, FL).',  vars: ['F', 'C', 'CL', 'FL'] },
+      { q: 'specimen_intact(s).',                                       vars: null },
+      { q: 'also_fix(s, W).',                                           vars: ['W'] },
+      { q: 'critical(s, T, D), value(s, T, V).',                        vars: ['T', 'D', 'V'] },
+      { q: 'accounts_for(s, T, C, W).',                                 vars: ['C', 'W'] },
+      { q: 'does_not_account_for(s, T, C, W).',                         vars: ['C', 'W'] },
+      { q: 'direction_unknown(s, T, C, W).',                            vars: ['C', 'W'] },
+      { q: 'unaccounted(s, T, W).',                                     vars: ['W'] },
+      { q: 'possible_action(s, A, W), action_label(A, L).',             vars: ['A', 'W', 'L'] },
+      { q: 'producing_rule(A, R), decision(s, A, _).',                  vars: ['R'] },
+      { q: 'derivation_rule(K, R).',                                    vars: ['K', 'R'] },
+      { q: 'boundary(B).',                                              vars: ['B'] }
+    ]).then(render).catch(fail);
+  }
+
+  function cap(s) {
+    s = String(s);
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function uniq(rows, key) {
+    var seen = {}, out = [];
+    rows.forEach(function (r) {
+      var k = key(r);
+      if (!seen[k]) { seen[k] = 1; out.push(r); }
+    });
+    return out;
+  }
+
+  function render(r) {
+    var d = r[0][0];
+    var faults = uniq(r[1], function (x) { return x.C; });
+    var intact = r[2].length > 0;
+    var alsoFix = uniq(r[3], function (x) { return x.W; });
+    var crit = uniq(r[4], function (x) { return x.T + x.D; });
+    var fits = uniq(r[5], function (x) { return x.C; });
+    var clash = uniq(r[6], function (x) { return x.C; });
+    var unsure = uniq(r[7], function (x) { return x.C; });
+    var real = uniq(r[8], function (x) { return x.W; });
+    var others = uniq(r[9], function (x) { return x.A; });
+    var rule = r[10][0] ? r[10][0].R : '';
+    var derivations = r[11];
+    var boundary = r[12][0] ? r[12][0].B : '';
+
+    var h = '<div class="verdict ' + (d ? (TONE[d.A] || 'ok') : 'ok') + '">' +
+              '<p class="count">The laboratory should</p>' +
+              '<h2>' + esc(d ? d.L : 'No decision reached') + '</h2>' +
+              '<p class="because">' + esc(d ? cap(d.W) : '') + '</p>' +
+            '</div>';
+
+    if (faults.length) {
+      h += '<p class="needle">' + (intact
+        ? 'The blood in the tube is still good &mdash; the patient does not need to be bled again.'
+        : 'Fresh blood is needed &mdash; re-running this tube would only repeat the error.') +
+        '</p>';
+    }
+
+    if (crit.length) {
+      h += '<p class="crit">';
+      crit.forEach(function (x) {
+        h += (x.T === 'fbs' ? 'Fasting sugar' : 'HbA1c') + ' ' + esc(x.V) +
+             ' is critically ' + esc(x.D) + ' &mdash; telephone the clinician once the ' +
+             'result is confirmed sound. ';
+      });
+      h += '</p>';
+    }
+
+    if (alsoFix.length) {
+      h += '<p class="crit">';
+      alsoFix.forEach(function (x) { h += esc(cap(x.W)) + '. '; });
+      h += '</p>';
+    }
+
+    // --- the explanation chain, folded away until asked for ---
+    h += '<details class="why"><summary>Why</summary><div class="whybody">';
+
+    h += '<h3>User input</h3><ul>';
+    if (S.vals.fbs !== null)   h += '<li>Fasting blood sugar <b>' + esc(S.vals.fbs) + '</b> mg/dL</li>';
+    if (S.vals.hba1c !== null) h += '<li>HbA1c <b>' + esc(S.vals.hba1c) + '</b> %</li>';
+    if (S.vals.prev_fbs !== null)   h += '<li>Last fasting sugar ' + esc(S.vals.prev_fbs) + ' mg/dL</li>';
+    if (S.vals.prev_hba1c !== null) h += '<li>Last HbA1c ' + esc(S.vals.prev_hba1c) + ' %</li>';
+    S.trace.forEach(function (t) {
+      h += '<li>' + esc(t.q) + ' <b>' + esc(t.a) + '</b></li>';
+    });
+    h += '</ul>';
+
+    var skipped = S.order.length - S.trace.length;
+    if (skipped > 0) {
+      h += '<p class="aside">Asked ' + S.trace.length + ' of ' + S.order.length +
+           ' questions. The other ' + skipped + ' were never asked, because ' +
+           'settled/2 proved that nothing still unasked could rank above this ' +
+           'action.</p>';
+    }
+
+    h += '<h3>Facts derived</h3>';
+    if (faults.length) {
+      h += '<ul>';
+      faults.forEach(function (x) {
+        h += '<li><code>fault(s, ' + esc(x.F) + ', ' + esc(x.C) + ')</code> &mdash; ' +
+             esc(x.CL) + '</li>';
+      });
+      if (!intact) h += '<li><code>specimen_compromised(s)</code></li>';
+      h += '</ul>';
+    } else {
+      h += '<p class="aside">No fault derived. The forward-chaining cycle reached ' +
+           'quiescence with nothing to conclude.</p>';
+    }
+
+    h += '<h3>Rules applied</h3><ul>';
+    derivations.forEach(function (x) { h += '<li><code>' + esc(x.R) + '</code></li>'; });
+    if (rule) h += '<li><code>' + esc(rule) + '</code></li>';
+    h += '</ul>';
+
+    h += '<h3>Reasoning</h3>';
+    var lines = [];
+    fits.forEach(function (x)   { lines.push(['fits', 'Consistent', x.W]); });
+    clash.forEach(function (x)  { lines.push(['clash', 'Does not fit', x.W]); });
+    unsure.forEach(function (x) { lines.push(['unsure', 'Cannot say', x.W]); });
+    real.forEach(function (x)   { lines.push(['real', 'Probably real', x.W]); });
+    if (lines.length) {
+      h += '<ul class="check">';
+      lines.forEach(function (l) {
+        h += '<li class="' + l[0] + '"><b>' + l[1] + '.</b> ' + esc(cap(l[2])) + '.</li>';
+      });
+      h += '</ul>';
+    }
+    if (others.length > 1) {
+      h += '<p class="aside">Other actions the rules allowed, all ranked below this one:</p><ul>';
+      others.forEach(function (x) {
+        if (d && x.A === d.A) return;
+        h += '<li>' + esc(x.L) + ' &mdash; ' + esc(cap(x.W)) + '</li>';
+      });
+      h += '</ul>';
+    }
+
+    h += '<h3>Conclusion</h3><p>' + esc(d ? d.L + '. ' + cap(d.W) : '') + '.</p>';
+    h += '<p class="aside">' + esc(boundary) + '</p>';
+    h += '</div></details>';
+
+    h += '<button type="button" class="restart" id="again">Start another</button>';
+
+    screen(h);
+    el('again').onclick = reset;
+  }
+
+  function fail(e) {
+    screen('<div class="step"><h2 class="q">The reasoner reported a problem</h2>' +
+           '<pre class="err">' + esc(e) + '</pre>' +
+           '<button type="button" class="opt" onclick="location.reload()">Start again</button></div>');
+  }
+
+  // ------------------------------------------------------------------- start
+
+  function reset() {
+    screen(
+      '<div class="step">' +
+        '<h2 class="q">Enter the result</h2>' +
+        '<div class="field"><label for="v_fbs">Fasting blood sugar</label>' +
+          '<div class="numrow"><input type="number" step="1" id="v_fbs" autocomplete="off">' +
+          '<span class="unit">mg/dL</span></div></div>' +
+        '<details class="more"><summary>Add HbA1c or a previous result</summary>' +
+          '<div class="field"><label for="v_hba1c">HbA1c</label>' +
+            '<div class="numrow"><input type="number" step="0.1" id="v_hba1c">' +
+            '<span class="unit">%</span></div></div>' +
+          '<div class="field"><label for="v_prev_fbs">Last fasting sugar</label>' +
+            '<div class="numrow"><input type="number" step="1" id="v_prev_fbs">' +
+            '<span class="unit">mg/dL</span></div></div>' +
+          '<div class="field"><label for="v_prev_hba1c">Last HbA1c</label>' +
+            '<div class="numrow"><input type="number" step="0.1" id="v_prev_hba1c">' +
+            '<span class="unit">%</span></div></div>' +
+        '</details>' +
+        '<p class="err" id="startErr"></p>' +
+        '<button type="button" class="go wide" id="beginBtn">Begin</button>' +
+        '<p class="examples">Try &nbsp;' +
+          '<a href="#" data-ex="61">61</a> &middot; ' +
+          '<a href="#" data-ex="94">94</a> &middot; ' +
+          '<a href="#" data-ex="350">350</a> &middot; ' +
+          '<a href="#" data-ex="12">12</a>' +
+        '</p>' +
+      '</div>');
+    el('beginBtn').onclick = begin;
+    el('v_fbs').focus();
+    el('v_fbs').onkeydown = function (e) { if (e.key === 'Enter') begin(); };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ex]'), function (a) {
+      a.onclick = function (e) {
+        e.preventDefault();
+        el('v_fbs').value = a.getAttribute('data-ex');
+        begin();
+      };
+    });
+  }
 
   function loadKnowledgeBase() {
     return fetch('kb.pl')
       .then(function (r) { if (!r.ok) throw new Error('status'); return r.text(); })
       .then(function (t) { el('kbsource').textContent = 'kb.pl, loaded live'; return t; })
-      .catch(function () { el('kbsource').textContent = 'embedded copy of kb.pl'; return el('kb').textContent; });
+      .catch(function () {
+        el('kbsource').textContent = 'embedded copy of kb.pl';
+        return el('kb').textContent;
+      });
   }
 
-  function init() {
-    buildForm();
-    resetForm();
-    loadExample('ex1');
+  loadKnowledgeBase().then(function (text) { KB = text; reset(); });
 
-    el('runBtn').addEventListener('click', run);
-    el('clearBtn').addEventListener('click', function () { resetForm(); });
-    el('ex1').addEventListener('click', function () { loadExample('ex1'); run(); });
-    el('ex2').addEventListener('click', function () { loadExample('ex2'); run(); });
-    el('ex3').addEventListener('click', function () { loadExample('ex3'); run(); });
-
-    loadKnowledgeBase().then(function (t) { KB = t; run(); });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else { init(); }
 })();
