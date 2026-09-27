@@ -270,8 +270,8 @@
             '<p class="count">Settled</p>' +
             '<h2 class="q">' + esc(label) + '</h2>' +
             '<p class="lede">Nothing still unasked can change that. The questions ' +
-              'left are about the analyser &mdash; they cannot alter the decision, but ' +
-              'they decide what has to be fixed before the fresh sample is run.</p>' +
+              'left are about the analyser. They cannot alter the decision, but they ' +
+              'decide what has to be fixed before the fresh sample is run.</p>' +
             '<div class="opts">' +
               '<button type="button" class="opt" id="goOn">Check the analyser too</button>' +
               '<button type="button" class="opt quiet" id="stopNow">Show the result</button>' +
@@ -344,8 +344,8 @@
 
     if (faults.length) {
       h += '<p class="needle">' + (intact
-        ? 'The blood in the tube is still good &mdash; the patient does not need to be bled again.'
-        : 'Fresh blood is needed &mdash; re-running this tube would only repeat the error.') +
+        ? 'The blood in the tube is still good, so the patient does not need to be bled again.'
+        : 'Fresh blood is needed. Re-running this tube would only repeat the error.') +
         '</p>';
     }
 
@@ -353,7 +353,7 @@
       h += '<p class="crit">';
       crit.forEach(function (x) {
         h += (x.T === 'fbs' ? 'Fasting sugar' : 'HbA1c') + ' ' + esc(x.V) +
-             ' is critically ' + esc(x.D) + ' &mdash; telephone the clinician once the ' +
+             ' is critically ' + esc(x.D) + '. Telephone the clinician once the ' +
              'result is confirmed sound. ';
       });
       h += '</p>';
@@ -390,7 +390,7 @@
     if (faults.length) {
       h += '<ul>';
       faults.forEach(function (x) {
-        h += '<li><code>fault(s, ' + esc(x.F) + ', ' + esc(x.C) + ')</code> &mdash; ' +
+        h += '<li><code>fault(s, ' + esc(x.F) + ', ' + esc(x.C) + ')</code>: ' +
              esc(x.CL) + '</li>';
       });
       if (!intact) h += '<li><code>specimen_compromised(s)</code></li>';
@@ -422,7 +422,7 @@
       h += '<p class="aside">Other actions the rules allowed, all ranked below this one:</p><ul>';
       others.forEach(function (x) {
         if (d && x.A === d.A) return;
-        h += '<li>' + esc(x.L) + ' &mdash; ' + esc(cap(x.W)) + '</li>';
+        h += '<li>' + esc(x.L) + '. ' + esc(cap(x.W)) + '</li>';
       });
       h += '</ul>';
     }
