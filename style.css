@@ -285,3 +285,27 @@ select{
 .panel.alsofix h3{color:var(--susp-ink)}
 .panel.others{background:var(--ground)}
 .muted-note{margin:0 0 9px;font-size:12.8px;color:var(--muted)}
+
+/* ---------------------------------------------------------------------------
+   Consistency check - does the fault actually account for the abnormality?
+   Four states, four colours, so the eye sorts them before the brain does.
+   --------------------------------------------------------------------------- */
+
+.panel.consistency ul { list-style: none; margin: 0; padding: 0; }
+
+.panel.consistency li {
+  padding: .6rem .8rem .6rem 1rem;
+  margin-bottom: .45rem;
+  border-left: 3px solid #C9D4D6;
+  background: #F7FAFA;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.5;
+}
+.panel.consistency li:last-of-type { margin-bottom: 0; }
+
+.panel.consistency li.fits    { border-left-color: #3E8E5A; background: #EFF6F1; }
+.panel.consistency li.clashes { border-left-color: #C46A1E; background: #FCF4EA; }
+.panel.consistency li.unsure  { border-left-color: #7B7FA8; background: #F3F3F8; }
+.panel.consistency li.real    { border-left-color: #B03A5B; background: #FBEFF3; }
+
+.panel.consistency li b { color: #1B2426; }

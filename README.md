@@ -149,6 +149,39 @@ decision(S, Action, Why) :-
 A machine fault alongside a compromised specimen does not disappear — it comes
 back through `also_fix/2` as *"fix this before running the new sample"*.
 
+### The consistency check
+
+Finding a fault and *explaining the result* are two different questions, and
+the direction table answers the second one:
+
+```prolog
+does_not_account_for(S, Test, Cause, Why) :-
+    fault(S, _, Cause),
+    abnormal(S, Test, Seen),
+    fault_effect(Cause, Test, Pushes, _),
+    opposite(Pushes, Seen),
+    ...
+```
+
+A delay lowers glucose. If the sugar is **low**, the delay is a candidate. If
+the sugar is **350**, the delay cannot have caused that — so the high is
+probably the patient's own and should not be written off as a sample problem.
+`unaccounted/3` says so explicitly.
+
+There are three outcomes, not two, and the third one matters: when the only
+fault has an *unclear* effect on that test — a failed QC, a haemolysed HbA1c —
+`direction_unknown/4` fires instead, and the honest answer is that the number
+cannot be judged either way.
+
+**This never changes the action.** A delayed sample still needs fresh blood
+whichever way the result went. The consistency check decides only what the
+report says about the number, never what the laboratory does about the tube.
+
+The system deliberately does **not** infer the fault from the value. A fasting
+sugar of 240 could mean the patient did not fast, or it could mean diabetes —
+and a system that guessed the first would explain away the finding the test
+exists to detect.
+
 ---
 
 ## Still to do

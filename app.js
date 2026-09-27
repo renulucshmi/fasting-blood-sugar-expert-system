@@ -236,7 +236,11 @@
       solve(F, "critical(s, T, D), value(s, T, V).", ['T', 'D', 'V']),
       solve(F, "specimen_intact(s).", []),
       solve(F, "boundary(B).", ['B']),
-      solve(F, "possible_action(s, A, Why), action_label(A, Label).", ['A', 'Why', 'Label'])
+      solve(F, "possible_action(s, A, Why), action_label(A, Label).", ['A', 'Why', 'Label']),
+      solve(F, "accounts_for(s, T, C, Why).", ['T', 'C', 'Why']),
+      solve(F, "does_not_account_for(s, T, C, Why).", ['T', 'C', 'Why']),
+      solve(F, "direction_unknown(s, T, C, Why).", ['T', 'C', 'Why']),
+      solve(F, "unaccounted(s, T, Why).", ['T', 'Why'])
     ]).then(function (r) {
       render({
         decision:  r[0][0] || null,
@@ -246,7 +250,11 @@
         criticals: dedupe(r[4], function (x) { return x.T + x.D; }),
         intact:    r[5].length > 0,
         boundary:  r[6][0] ? r[6][0].B : '',
-        others:    dedupe(r[7], function (x) { return x.A; })
+        others:    dedupe(r[7], function (x) { return x.A; }),
+        accounts:  dedupe(r[8],  function (x) { return x.C + x.T; }),
+        notAccount: dedupe(r[9], function (x) { return x.C + x.T; }),
+        unknownDir: dedupe(r[10], function (x) { return x.C + x.T; }),
+        unaccounted: dedupe(r[11], function (x) { return x.T; })
       });
     }).catch(function (e) {
       el('result').innerHTML = '<div class="panel bad"><h2>The reasoner reported a problem</h2>' +
@@ -318,6 +326,29 @@
              esc(x.T === 'fbs' ? 'sugar' : 'HbA1c') + ' <b>' + word + '</b> — ' + esc(x.Why) + '.</li>';
       });
       h += '</ul></section>';
+    }
+
+    // Does the fault actually ACCOUNT for the abnormality? A separate question
+    // from whether the fault exists, and the one that protects a real result
+    // from being written off as a sample problem.
+    var hasCheck = r.accounts.length || r.notAccount.length ||
+                   r.unknownDir.length || r.unaccounted.length;
+    if (hasCheck) {
+      h += '<section class="panel consistency"><h3>Does that explain the result?</h3><ul>';
+      r.accounts.forEach(function (x) {
+        h += '<li class="fits"><b>Consistent.</b> ' + esc(x.Why) + '.</li>';
+      });
+      r.notAccount.forEach(function (x) {
+        h += '<li class="clashes"><b>Does not fit.</b> ' + esc(x.Why) + '.</li>';
+      });
+      r.unknownDir.forEach(function (x) {
+        h += '<li class="unsure"><b>Cannot say.</b> ' + esc(x.Why) + '.</li>';
+      });
+      r.unaccounted.forEach(function (x) {
+        h += '<li class="real"><b>Probably real.</b> ' + esc(x.Why) + '.</li>';
+      });
+      h += '</ul><p class="muted-note">This does not change what to do with the ' +
+           'tube &mdash; only what the report should say about the number.</p></section>';
     }
 
     if (r.alsoFix.length) {

@@ -442,7 +442,101 @@ direction(S, Test, Cause, Direction, Why) :-
 
 
 % ----------------------------------------------------------------------------
-%  11.  RULES  -  the standing boundary
+%  11.  RULES  -  does the fault actually ACCOUNT for what we are seeing?
+%
+%  A fault is a fact about the world. Whether it explains the abnormality in
+%  front of you is a separate question, and the direction table answers it.
+%
+%  A delay lowers glucose. If the result is low, the delay is a candidate for
+%  having caused it. If the result is HIGH, the delay cannot be what caused
+%  that - so the high is probably the patient's own, and someone should look
+%  at it rather than write it off as a sample problem.
+%
+%  IMPORTANT: none of this changes the action. A delayed sample still needs
+%  fresh blood either way. This decides only what the report SAYS about the
+%  number, never what the laboratory DOES about the tube.
+% ----------------------------------------------------------------------------
+
+reference_range(fbs,   70,  99).
+reference_range(hba1c, 4.0, 5.6).
+
+abnormal(S, Test, high) :-
+    value(S, Test, V),
+    reference_range(Test, _, Hi),
+    V > Hi.
+abnormal(S, Test, low) :-
+    value(S, Test, V),
+    reference_range(Test, Lo, _),
+    V < Lo.
+
+opposite(low,  high).
+opposite(high, low).
+
+push_word(low,  'down').
+push_word(high, 'up').
+seen_word(low,  'low').
+seen_word(high, 'high').
+
+% The fault pushes the result the same way it actually went, so it is a
+% candidate for having caused the abnormality.
+accounts_for(S, Test, Cause, Why) :-
+    fault(S, _, Cause),
+    abnormal(S, Test, Seen),
+    fault_effect(Cause, Test, Seen, Effect),
+    fault_label(Cause, Label),
+    push_word(Seen, PW),
+    seen_word(Seen, SW),
+    atom_concat(Label, ' pushes the result ', A),
+    atom_concat(A, PW, B),
+    atom_concat(B, ', and this result is ', C),
+    atom_concat(C, SW, D),
+    atom_concat(D, ' - so it could well be the cause (', E),
+    atom_concat(E, Effect, F),
+    atom_concat(F, ')', Why).
+
+% The fault pushes the OPPOSITE way to how the result actually went. Whatever
+% else is true, this fault is not the explanation for this abnormality.
+does_not_account_for(S, Test, Cause, Why) :-
+    fault(S, _, Cause),
+    abnormal(S, Test, Seen),
+    fault_effect(Cause, Test, Pushes, _),
+    opposite(Pushes, Seen),
+    fault_label(Cause, Label),
+    push_word(Pushes, PW),
+    seen_word(Seen, SW),
+    atom_concat(Label, ' pushes the result ', A),
+    atom_concat(A, PW, B),
+    atom_concat(B, ', but this result is ', C),
+    atom_concat(C, SW, D),
+    atom_concat(D, ' - so it is not what caused that', Why).
+
+% A fault that touches this test, but in a direction nobody can predict. This
+% is NOT the same as no fault at all, and it must not be reported as though it
+% were - the honest answer here is that the number cannot be judged.
+direction_unknown(S, Test, Cause, Why) :-
+    fault(S, _, Cause),
+    abnormal(S, Test, _),
+    fault_effect(Cause, Test, unclear, Effect),
+    fault_label(Cause, Label),
+    atom_concat(Label, ' affects this test, but not in a predictable direction (', A),
+    atom_concat(A, Effect, B),
+    atom_concat(B, ') - so this result cannot be judged either way', Why).
+
+% Abnormal, nothing found pushes it that way, and nothing found is unpredictable
+% either. The abnormality belongs to the patient until something proves otherwise.
+unaccounted(S, Test, Why) :-
+    abnormal(S, Test, Seen),
+    \+ accounts_for(S, Test, _, _),
+    \+ direction_unknown(S, Test, _, _),
+    seen_word(Seen, SW),
+    atom_concat('this result is ', SW, A),
+    atom_concat(A, ' and nothing found in the run pushes it that way - treat the ', B),
+    atom_concat(B, SW, C),
+    atom_concat(C, ' value as the patient''s own until proved otherwise', Why).
+
+
+% ----------------------------------------------------------------------------
+%  12.  RULES  -  the standing boundary
 % ----------------------------------------------------------------------------
 
 boundary('This system decides whether a result is fit to leave the laboratory. It does not interpret what the result means for the patient - that is the clinician''s work.').
