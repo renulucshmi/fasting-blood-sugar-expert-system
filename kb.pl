@@ -353,13 +353,13 @@ critical(S, Test, high) :-
 % ----------------------------------------------------------------------------
 
 % 1. Identification first. Nothing else matters if this is the wrong patient.
-possible_action(S, recollect_urgent,
-    'the label does not match the request - this may be the wrong patient') :-
-    fault(S, identity, label_mismatch).
+possible_action(S, recollect_urgent, Why) :-
+    fault(S, identity, label_mismatch),
+    action_reason(recollect_urgent, Why).
 
 % 2. A typing doubt needs no new blood at all.
-possible_action(S, correct_entry,
-    'the result itself is sound - check what was typed against the analyser') :-
+possible_action(S, correct_entry, Why) :-
+    action_reason(correct_entry, Why),
     fault(S, identity, transcription_doubt),
     \+ fault(S, sample, _),
     \+ fault(S, collection, _),
@@ -368,23 +368,19 @@ possible_action(S, correct_entry,
 % 3. Collection fault - fresh blood AND the patient has to be told something.
 possible_action(S, recollect_teach, Why) :-
     fault(S, collection, Cause),
-    fault_label(Cause, Label),
-    instruction(Cause, What),
-    atom_concat(Label, ', so: ', Part),
-    atom_concat(Part, What, Why).
+    instruction(Cause, _),
+    action_reason(recollect_teach, Why).
 
 % 4. Sample fault - fresh blood, nothing to teach the patient.
 possible_action(S, recollect, Why) :-
-    fault(S, sample, Cause),
-    fault_label(Cause, Label),
-    atom_concat(Label, ' - this specimen cannot give a sound result', Why).
+    fault(S, sample, _),
+    action_reason(recollect, Why).
 
 % 5. Machine fault with the specimen intact - re-run, do not re-bleed.
 possible_action(S, rerun_same_sample, Why) :-
-    fault(S, machine, Cause),
+    fault(S, machine, _),
     specimen_intact(S),
-    fault_label(Cause, Label),
-    atom_concat(Label, ' - the analyser was at fault, so the blood is still good', Why).
+    action_reason(rerun_same_sample, Why).
 
 % 6. Nothing found, but the number cannot be right.
 possible_action(S, escalate, Why) :-
@@ -392,16 +388,16 @@ possible_action(S, escalate, Why) :-
     implausible(S, _, Why).
 
 % 7. Nothing found, plausible, but worth a note on the report.
-possible_action(S, release_comment,
-    'no fault found, but the change from the last result is large') :-
+possible_action(S, release_comment, Why) :-
     \+ fault(S, _, _),
-    delta_fail(S, _, _).
+    delta_fail(S, _, _),
+    action_reason(release_comment, Why).
 
 % 8. Clean.
-possible_action(S, release,
-    'no fault found and the result is plausible') :-
+possible_action(S, release, Why) :-
     \+ fault(S, _, _),
-    plausible(S).
+    plausible(S),
+    action_reason(release, Why).
 
 
 % decision/3 - the single action the laboratory should take.
@@ -415,15 +411,14 @@ decision(S, Action, Why) :-
 
 
 % also_fix/2 - a machine fault alongside a recollection still has to be fixed.
-also_fix(S, Why) :-
+% Hands back the fault itself. The interface says what to do with it.
+also_fix(S, Cause) :-
     fault(S, machine, Cause),
-    specimen_compromised(S),
-    fault_label(Cause, Label),
-    atom_concat('Fix this before running the new sample: ', Label, Why).
+    specimen_compromised(S).
 
 
 % ----------------------------------------------------------------------------
-%  11.  RULES  -  does the fault actually ACCOUNT for what we are seeing?
+%  10.  RULES  -  does the fault actually ACCOUNT for what we are seeing?
 %
 %  A fault is a fact about the world. Whether it explains the abnormality in
 %  front of you is a separate question, and the direction table answers it.
@@ -453,27 +448,13 @@ abnormal(S, Test, low) :-
 opposite(low,  high).
 opposite(high, low).
 
-push_word(low,  'down').
-push_word(high, 'up').
-seen_word(low,  'low').
-seen_word(high, 'high').
-
 % The fault pushes the result the same way it actually went, so it is a
 % candidate for having caused the abnormality.
 accounts_for(S, Test, Cause, Why) :-
     fault(S, _, Cause),
     abnormal(S, Test, Seen),
-    fault_effect(Cause, Test, Seen, Effect),
-    fault_label(Cause, Label),
-    push_word(Seen, PW),
-    seen_word(Seen, SW),
-    atom_concat(Label, ' pushes the result ', A),
-    atom_concat(A, PW, B),
-    atom_concat(B, ', and this result is ', C),
-    atom_concat(C, SW, D),
-    atom_concat(D, ' - so it could well be the cause (', E),
-    atom_concat(E, Effect, F),
-    atom_concat(F, ')', Why).
+    fault_effect(Cause, Test, Seen, _),
+    consistency_reason(fits, Seen, Why).
 
 % The fault pushes the OPPOSITE way to how the result actually went. Whatever
 % else is true, this fault is not the explanation for this abnormality.
@@ -482,14 +463,7 @@ does_not_account_for(S, Test, Cause, Why) :-
     abnormal(S, Test, Seen),
     fault_effect(Cause, Test, Pushes, _),
     opposite(Pushes, Seen),
-    fault_label(Cause, Label),
-    push_word(Pushes, PW),
-    seen_word(Seen, SW),
-    atom_concat(Label, ' pushes the result ', A),
-    atom_concat(A, PW, B),
-    atom_concat(B, ', but this result is ', C),
-    atom_concat(C, SW, D),
-    atom_concat(D, ' - so it is not what caused that', Why).
+    consistency_reason(clashes, Seen, Why).
 
 % A fault that touches this test, but in a direction nobody can predict. This
 % is NOT the same as no fault at all, and it must not be reported as though it
@@ -497,11 +471,8 @@ does_not_account_for(S, Test, Cause, Why) :-
 direction_unknown(S, Test, Cause, Why) :-
     fault(S, _, Cause),
     abnormal(S, Test, _),
-    fault_effect(Cause, Test, unclear, Effect),
-    fault_label(Cause, Label),
-    atom_concat(Label, ' affects this test, but not in a predictable direction (', A),
-    atom_concat(A, Effect, B),
-    atom_concat(B, ') - so this result cannot be judged either way', Why).
+    fault_effect(Cause, Test, unclear, _),
+    consistency_reason(unsure, any, Why).
 
 % A fault with NO fault_effect/4 entry for this test is a gap in the knowledge
 % base, not a finding that it has no effect. Silence is not evidence.
@@ -524,12 +495,7 @@ effect_unrecorded(S, Test, Cause) :-
 unrecorded_effect(S, Test, Cause, Why) :-
     effect_unrecorded(S, Test, Cause),
     abnormal(S, Test, _),
-    fault_label(Cause, Label),
-    test_label(Test, TL),
-    atom_concat('the knowledge base does not record what ', Label, A),
-    atom_concat(A, ' does to ', B),
-    atom_concat(B, TL, C),
-    atom_concat(C, ', so this result cannot be judged against it', Why).
+    consistency_reason(gap, any, Why).
 
 % Abnormal, nothing found pushes it that way, nothing found is unpredictable,
 % and nothing found has an unrecorded effect. Only then does the abnormality
@@ -539,22 +505,18 @@ unaccounted(S, Test, Why) :-
     \+ accounts_for(S, Test, _, _),
     \+ direction_unknown(S, Test, _, _),
     \+ effect_unrecorded(S, Test, _),
-    seen_word(Seen, SW),
-    atom_concat('this result is ', SW, A),
-    atom_concat(A, ' and nothing found in the run pushes it that way - treat the ', B),
-    atom_concat(B, SW, C),
-    atom_concat(C, ' value as the patient''s own until proved otherwise', Why).
+    consistency_reason(real, Seen, Why).
 
 
 % ----------------------------------------------------------------------------
-%  12.  RULES  -  the standing boundary
+%  11.  RULES  -  the standing boundary
 % ----------------------------------------------------------------------------
 
 boundary('This system decides whether a result is fit to leave the laboratory. It does not interpret what the result means for the patient - that is the clinician''s work.').
 
 
 % ----------------------------------------------------------------------------
-%  13.  THE CONSULTATION  -  what the system may ask, and when it may stop
+%  12.  THE CONSULTATION  -  what the system may ask, and when it may stop
 %
 %  The system does not show a form. It asks one question at a time, and it
 %  asks as few as it can.
@@ -712,14 +674,12 @@ settled(S, LowestUnasked) :-
 % Why the consultation stopped where it did. The counting is the interface's
 % business; the reason is the knowledge base's.
 stopped_early(Why) :-
-    decision(s, Action, _),
-    action_label(Action, Label),
-    atom_concat('nothing still unasked could rank above "', Label, A),
-    atom_concat(A, '"', Why).
+    decision(s, _, _),
+    Why = 'nothing still unasked could rank above the action already established'.
 
 
 % ----------------------------------------------------------------------------
-%  14.  THE EXPLANATION CHAIN
+%  13.  THE EXPLANATION CHAIN
 %
 %  User Input -> Facts -> Rules Applied -> Reasoning -> Final Conclusion.
 %  The first four are already in the system; this section names the rule that
@@ -754,7 +714,7 @@ derivation_rule(selection,
 
 
 % ----------------------------------------------------------------------------
-%  15.  FBS AND HbA1c ARE NOT THE SAME SPECIMEN
+%  14.  FBS AND HbA1c ARE NOT THE SAME SPECIMEN
 %
 %  Glucose is drawn into fluoride oxalate; HbA1c into EDTA. They are always
 %  two tubes, so they are two questions. Asking once and applying the answer
@@ -804,19 +764,12 @@ wrong_tube_detail(S, Test, Used, Proper) :-
 
 % fault_note/3 - detail a plain fault_label cannot carry. The interface shows
 % it beside the fault it belongs to.
-fault_note(S, wrong_tube, Note) :-
-    wrong_tube_detail(S, Test, Used, Proper),
-    test_label(Test, TL),
-    tube_label(Used, UL),
-    tube_label(Proper, PL),
-    atom_concat(TL, ' was drawn into ', A),
-    atom_concat(A, UL, B),
-    atom_concat(B, ', but it needs ', C),
-    atom_concat(C, PL, Note).
+fault_note(S, wrong_tube, Test, Used, Proper) :-
+    wrong_tube_detail(S, Test, Used, Proper).
 
 
 % ----------------------------------------------------------------------------
-%  16.  HbA1c INTERFERENCE DEPENDS ON THE METHOD
+%  15.  HbA1c INTERFERENCE DEPENDS ON THE METHOD
 %
 %  This section replaces a single fact that used to read:
 %
@@ -868,12 +821,11 @@ fault_effect(Cause, hba1c, Direction, Why) :-
 
 % Which method was used, for the record. Part of the explanation: a reader
 % checking the reasoning later needs to know what the result was measured on.
-method_in_use(S, Why) :-
+method_in_use(S, Name) :-
     value(S, hba1c, _),
     hba1c_method(S, M),
     M \== unknown,
-    method_name(M, Name),
-    atom_concat('the HbA1c was measured by ', Name, Why).
+    method_name(M, Name).
 
 % When an HbA1c is in doubt and the method was never recorded, say what is
 % missing rather than guessing. A gap the system names is a gap the expert
@@ -883,3 +835,59 @@ method_not_recorded(S, Why) :-
     fault(S, _, _),
     \+ ( hba1c_method(S, M), M \== unknown ),
     Why = 'the HbA1c method was not recorded, and whether a fault affects an HbA1c depends on it'.
+
+
+% ----------------------------------------------------------------------------
+%  16.  THE WORDS
+%
+%  Every sentence the system can say is a fact here. The rules above decide
+%  WHICH sentence applies; this section holds the sentence itself.
+%
+%  These used to be assembled at run time out of fragments with atom_concat.
+%  That put the wording inside the reasoning, where it was hard to read and
+%  harder to check. As facts, every sentence the system is capable of saying
+%  can be read straight off the page - which is also what the domain expert
+%  has to confirm.
+%
+%  Where a sentence needs to name a particular fault or tube, the rule hands
+%  the fault back as well and the interface puts the two together. Joining
+%  two strings for display is formatting, not reasoning.
+% ----------------------------------------------------------------------------
+
+% action_reason(Action, Why) - why each action follows.
+action_reason(recollect_urgent,
+    'the label does not match the request, so this may be the wrong patient').
+action_reason(correct_entry,
+    'the result itself is sound, so check what was typed against the analyser').
+action_reason(recollect_teach,
+    'the sample was not collected correctly, and the patient has to be told what to do differently').
+action_reason(recollect,
+    'this specimen cannot give a sound result').
+action_reason(rerun_same_sample,
+    'the analyser was at fault, so the blood in the tube is still good').
+action_reason(release_comment,
+    'no fault found, but the change from the last result is large').
+action_reason(release,
+    'no fault found and the result is plausible').
+
+% consistency_reason(Kind, Direction, Why) - does the fault explain the result?
+% Direction is low, high, or any where the sentence does not depend on it.
+consistency_reason(fits, low,
+    'this fault pushes the result down, and this result is low, so it could well be the cause').
+consistency_reason(fits, high,
+    'this fault pushes the result up, and this result is high, so it could well be the cause').
+consistency_reason(clashes, low,
+    'this fault pushes the result up, but this result is low, so it is not what caused that').
+consistency_reason(clashes, high,
+    'this fault pushes the result down, but this result is high, so it is not what caused that').
+consistency_reason(unsure, any,
+    'this fault affects the test, but not in a predictable direction, so this result cannot be judged either way').
+consistency_reason(gap, any,
+    'the knowledge base does not record what this fault does to this test, so this result cannot be judged against it').
+consistency_reason(real, low,
+    'this result is low and nothing found in the run pushes it that way, so treat the low value as the patient''s own until proved otherwise').
+consistency_reason(real, high,
+    'this result is high and nothing found in the run pushes it that way, so treat the high value as the patient''s own until proved otherwise').
+
+% What the interface prefixes an also_fix/2 cause with.
+also_fix_prefix('Fix this before running the new sample:').

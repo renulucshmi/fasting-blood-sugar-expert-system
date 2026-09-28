@@ -474,6 +474,83 @@ const INVARIANTS = [
     }
   }
   ,{
+    name: 'the README describes the system that actually exists',
+    // The README went stale twice during this project: it still described
+    // fault_holds/3 after the forward-chaining rewrite, and it claimed a
+    // section count that was wrong because a removed section left a hole in
+    // the numbering. Documentation that lies is worse than none.
+    run: async () => {
+      const problems = [];
+      const README = fs.readFileSync(__dirname + '/README.md', 'utf8');
+
+      // 1. Every Prolog line the README quotes must exist in kb.pl.
+      const SKIP = /^(%|value\(|tube\(|delay_hours|qc_status|fault_family\()/;
+      for (const m of README.matchAll(/```prolog\n([\s\S]*?)```/g)) {
+        for (const raw of m[1].split('\n')) {
+          const line = raw.trim();
+          if (!line || SKIP.test(line)) continue;
+          if (!KB.includes(line.replace(/\s+%.*$/, '').trim())) {
+            problems.push(`README quotes a rule that is not in kb.pl: ${line}`);
+          }
+        }
+      }
+
+      // 2. Predicates the README names must still exist.
+      for (const name of ['fault_condition', 'fault_family', 'forward_chain',
+                          'specimen_compromised', 'decision', 'settled',
+                          'also_fix', 'boundary', 'method_effect']) {
+        if (!new RegExp('\\b' + name + '\\b').test(KB)) {
+          problems.push(`README names ${name}, which no longer exists in kb.pl`);
+        }
+      }
+
+      // 3. Predicates the README must NOT name, because they were removed.
+      for (const gone of ['fault_holds', 'blood_still_usable', 'reset_derived',
+                          'repeat_done']) {
+        if (README.includes(gone)) {
+          problems.push(`README still mentions ${gone}, which was removed`);
+        }
+      }
+
+      // 4. The counts it states must be the real ones.
+      const strip = KB.split('\n').filter(l => !l.trim().startsWith('%')).join('\n')
+                      .replace(/:-\s*dynamic\([^)]*\)\./g, '');
+      const clauses = strip.split(/\.\s*\n/).map(c => c.trim()).filter(Boolean);
+      const rules = clauses.filter(c => c.includes(':-')).length;
+      const facts = clauses.length - rules;
+      const stated = README.match(/\*\*(\d+) rules and (\d+) facts\*\*/);
+      if (!stated) {
+        problems.push('README no longer states the rule and fact counts');
+      } else {
+        if (+stated[1] !== rules) problems.push(`README says ${stated[1]} rules, there are ${rules}`);
+        if (+stated[2] !== facts) problems.push(`README says ${stated[2]} facts, there are ${facts}`);
+      }
+
+      // 5. Section numbering must be contiguous, and match what it claims.
+      const nums = [...KB.matchAll(/^%  (\d+)\.  /gm)].map(m => +m[1]);
+      for (let i = 0; i < nums.length; i++) {
+        if (nums[i] !== i + 1) {
+          problems.push(`kb.pl section numbering jumps: ${nums.join(', ')}`);
+          break;
+        }
+      }
+      const WORDS = { 'twelve': 12, 'thirteen': 13, 'fourteen': 14,
+                      'fifteen': 15, 'sixteen': 16, 'seventeen': 17 };
+      const sec = README.match(/in (\w+) numbered sections/);
+      if (sec && WORDS[sec[1]] !== nums.length) {
+        problems.push(`README says ${sec[1]} sections, kb.pl has ${nums.length}`);
+      }
+
+      // 6. The test count it states must be the real one.
+      const claimed = README.match(/\*\*(\d+) tests in three layers\.\*\*/);
+      const real = CASES.length + INVARIANTS.length + JOURNEYS.length;
+      if (claimed && +claimed[1] !== real) {
+        problems.push(`README says ${claimed[1]} tests, the suite has ${real}`);
+      }
+      return problems;
+    }
+  }
+  ,{
     name: 'every question the knowledge base asks can be answered',
     // Regression guard. askable/4 declared a question the interface had no
     // way to turn into a fact, so the user answered it and nothing was
@@ -1066,8 +1143,9 @@ async function runCase(c) {
   }
 
   if (c.noteMentions) {
-    const notes = await query(session, 'fault_note(s, _, N).', ['N']);
-    const text = notes.map(r => r.N).join(' | ');
+    const notes = await query(session,
+      'fault_note(s, _, T, _, _), test_label(T, TL).', ['TL']);
+    const text = notes.map(r => r.TL).join(' | ');
     if (text.toLowerCase().indexOf(c.noteMentions.toLowerCase()) === -1) {
       problems.push(`note: expected it to name "${c.noteMentions}", got "${text}"`);
     }

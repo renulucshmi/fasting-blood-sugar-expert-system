@@ -327,20 +327,20 @@
       { q: 'decision(s, A, W), action_label(A, L).',                    vars: ['A', 'W', 'L'] },
       { q: 'fault(s, F, C), fault_label(C, CL), family_label(F, FL).',  vars: ['F', 'C', 'CL', 'FL'] },
       { q: 'specimen_intact(s).',                                       vars: null },
-      { q: 'also_fix(s, W).',                                           vars: ['W'] },
+      { q: 'also_fix(s, C), fault_label(C, L), also_fix_prefix(P).',    vars: ['C', 'L', 'P'] },
       { q: 'critical(s, T, D), value(s, T, V).',                        vars: ['T', 'D', 'V'] },
-      { q: 'accounts_for(s, T, C, W).',                                 vars: ['C', 'W'] },
-      { q: 'does_not_account_for(s, T, C, W).',                         vars: ['C', 'W'] },
-      { q: 'direction_unknown(s, T, C, W).',                            vars: ['C', 'W'] },
+      { q: 'accounts_for(s, T, C, W), fault_label(C, CL).',             vars: ['C', 'CL', 'W'] },
+      { q: 'does_not_account_for(s, T, C, W), fault_label(C, CL).',     vars: ['C', 'CL', 'W'] },
+      { q: 'direction_unknown(s, T, C, W), fault_label(C, CL).',        vars: ['C', 'CL', 'W'] },
       { q: 'unaccounted(s, T, W).',                                     vars: ['W'] },
       { q: 'possible_action(s, A, W), action_label(A, L).',             vars: ['A', 'W', 'L'] },
       { q: 'producing_rule(A, R), decision(s, A, _).',                  vars: ['R'] },
       { q: 'derivation_rule(K, R).',                                    vars: ['K', 'R'] },
       { q: 'boundary(B).',                                              vars: ['B'] },
-      { q: 'fault_note(s, C, N).',                                      vars: ['C', 'N'] },
-      { q: 'unrecorded_effect(s, T, C, W).',                            vars: ['C', 'W'] },
+      { q: 'fault_note(s, C, T, U, P), test_label(T, TL),\n             tube_label(U, UL), tube_label(P, PL).', vars: ['C', 'TL', 'UL', 'PL'] },
+      { q: 'unrecorded_effect(s, T, C, W), fault_label(C, CL).',        vars: ['C', 'CL', 'W'] },
       { q: 'stopped_early(W).',                                         vars: ['W'] },
-      { q: 'method_in_use(s, W).',                                      vars: ['W'] },
+      { q: 'method_in_use(s, N).',                                      vars: ['N'] },
       { q: 'method_not_recorded(s, W).',                                vars: ['W'] }
     ]).then(render).catch(fail);
   }
@@ -363,7 +363,7 @@
     var d = r[0][0];
     var faults = uniq(r[1], function (x) { return x.C; });
     var intact = r[2].length > 0;
-    var alsoFix = uniq(r[3], function (x) { return x.W; });
+    var alsoFix = uniq(r[3], function (x) { return x.C; });
     var crit = uniq(r[4], function (x) { return x.T + x.D; });
     var fits = uniq(r[5], function (x) { return x.C; });
     var clash = uniq(r[6], function (x) { return x.C; });
@@ -374,8 +374,10 @@
     var derivations = r[11];
     var boundary = r[12][0] ? r[12][0].B : '';
     var notes = {};
-    uniq(r[13], function (x) { return x.C + x.N; })
-      .forEach(function (x) { (notes[x.C] = notes[x.C] || []).push(x.N); });
+    uniq(r[13], function (x) { return x.C + x.TL; }).forEach(function (x) {
+      (notes[x.C] = notes[x.C] || [])
+        .push(x.TL + ' was drawn into ' + x.UL + ', but it needs ' + x.PL);
+    });
 
     var h = '<div class="verdict ' + (d ? (TONE[d.A] || 'ok') : 'ok') + '">' +
               '<p class="count">The laboratory should</p>' +
@@ -402,7 +404,7 @@
 
     if (alsoFix.length) {
       h += '<p class="crit">';
-      alsoFix.forEach(function (x) { h += esc(cap(x.W)) + '. '; });
+      alsoFix.forEach(function (x) { h += esc(x.P + ' ' + x.L) + '. '; });
       h += '</p>';
     }
 
@@ -454,14 +456,18 @@
 
     h += '<h3>Reasoning</h3>';
     var lines = [];
-    fits.forEach(function (x)   { lines.push(['fits', 'Consistent', x.W]); });
-    clash.forEach(function (x)  { lines.push(['clash', 'Does not fit', x.W]); });
-    unsure.forEach(function (x) { lines.push(['unsure', 'Cannot say', x.W]); });
+    // The reason is a fact in kb.pl and does not name the fault, so the two
+    // are put together here. Joining strings for display is formatting.
+    var say = function (x) { return cap(x.CL) + '. ' + cap(x.W); };
+    fits.forEach(function (x)   { lines.push(['fits', 'Consistent', say(x)]); });
+    clash.forEach(function (x)  { lines.push(['clash', 'Does not fit', say(x)]); });
+    unsure.forEach(function (x) { lines.push(['unsure', 'Cannot say', say(x)]); });
     uniq(r[14], function (x) { return x.C; })
-      .forEach(function (x) { lines.push(['gap', 'Not recorded', x.W]); });
+      .forEach(function (x) { lines.push(['gap', 'Not recorded', say(x)]); });
     // Whether a fault affects an HbA1c depends on the method, so the method
     // belongs in the reasoning - named when it is known, asked for when not.
-    if (r[16][0]) lines.push(['fits', 'Method', r[16][0].W]);
+    if (r[16][0]) lines.push(['fits', 'Method',
+      'The HbA1c was measured by ' + r[16][0].N]);
     if (r[17][0]) lines.push(['gap', 'Method not recorded', r[17][0].W]);
     real.forEach(function (x)   { lines.push(['real', 'Probably real', x.W]); });
     if (lines.length) {
