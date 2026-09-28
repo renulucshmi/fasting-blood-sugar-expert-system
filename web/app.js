@@ -578,13 +578,15 @@
       });
     }))
       .then(function (parts) {
-        el('kbsource').textContent = 'kb/*.pl, loaded live';
+        var live = el('kbsource');
+        if (live) live.textContent = 'kb/*.pl, loaded live';
         return parts.join('\n');
       })
       .catch(function () {
         // Opened straight from the disk: the browser will not read the files,
         // so fall back to the copy build.py embedded in this page.
-        el('kbsource').textContent = 'the copy embedded in this page';
+        var embedded = el('kbsource');
+        if (embedded) embedded.textContent = 'the copy embedded in this page';
         return el('kb').textContent;
       });
   }
