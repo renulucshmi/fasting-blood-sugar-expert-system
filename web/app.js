@@ -590,16 +590,21 @@
     screen(
       '<div class="step">' +
         '<h2 class="hero">Is this result fit to release?</h2>' +
-        // boundary/1 is a fact in kb/, so what the page claims the system
-        // does is the knowledge base's own sentence, not the interface's.
-        '<p class="bound">' + esc(boundary) + '</p>' +
-        '<button type="button" class="go wide" id="startBtn">' +
+        // Nothing between the question and the way to answer it. A paragraph
+        // sat here before and pushed the button down the page.
+        '<button type="button" class="go wide cta" id="startBtn">' +
           'Begin Consultation &rarr;</button>' +
         '<p class="note">Runs locally in your browser using Tau Prolog. ' +
         'No data is transmitted.</p>' +
         // Reference, not the point of the page, so it sits after the action
         // and is set quietly. The marker still finds the expert in one look.
         '<section class="credits">' +
+          '<div class="span">' +
+            // boundary/1 is a fact in kb/, so what the page claims the system
+            // does is the knowledge base's own sentence, not the interface's.
+            '<h3 class="lbl">Scope</h3>' +
+            '<p class="val"><span class="sub">' + esc(boundary) + '</span></p>' +
+          '</div>' +
           '<div>' +
             '<h3 class="lbl">Module</h3>' +
             '<p class="val">CM 3321' +

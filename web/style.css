@@ -169,6 +169,33 @@ input[type="number"]:focus-visible {
 }
 .go.wide  { display: block; width: 100%; margin-top: 1.75rem; padding: .85rem; }
 
+/* The landing call to action. Space above it is what makes it read as the
+   one thing to do; the lift is small on purpose - the page is a laboratory
+   tool, not a sales page. */
+.go.cta {
+  margin-top: 2rem;
+  padding: 1.05rem;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: .005em;
+  box-shadow: 0 1px 2px rgba(23, 109, 114, .22),
+              0 10px 22px -12px rgba(23, 109, 114, .55);
+  transition: background .12s, box-shadow .16s, transform .12s;
+}
+
+.go.cta:hover {
+  box-shadow: 0 1px 2px rgba(23, 109, 114, .26),
+              0 14px 28px -12px rgba(23, 109, 114, .6);
+  transform: translateY(-1px);
+}
+
+.go.cta:active { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .go.cta { transition: background .12s; }
+  .go.cta:hover { transform: none; }
+}
+
 .back {
   margin-top: 1.5rem;
   padding: 0;
@@ -431,10 +458,14 @@ body.at-home .mast h1 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.75rem;
-  margin-top: 3rem;
+  margin-top: 3.25rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--line);
 }
+
+/* The scope statement runs the full width above the three credit columns. */
+.credits .span { grid-column: 1 / -1; }
+.credits .span .sub { display: block; max-width: 44ch; }
 
 .lbl {
   font-size: .72rem;
@@ -464,6 +495,7 @@ body.at-home .mast h1 {
   body.at-home .mast h1 { font-size: 1.3rem; }
   .hero { font-size: 1.7rem; max-width: none; }
   .credits { grid-template-columns: 1fr; gap: 1.3rem; margin-top: 2.5rem; }
+  .go.cta { padding: .95rem; }
 }
 
 /* The certainty factor under the verdict. Quiet on purpose: it states a
