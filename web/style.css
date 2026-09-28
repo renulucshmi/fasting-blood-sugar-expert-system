@@ -6,12 +6,12 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  --ink:    #16191a;
+  --ink:    #17252b;
   --soft:   #55605f;
-  --faint:  #8c9795;
-  --line:   #e3e7e6;
-  --paper:  #fcfcfb;
-  --accent: #14666d;
+  --faint:  #6b7a80;   /* darkened from #8c9795: 2.9:1 was below AA */
+  --line:   #e4e9e8;
+  --paper:  #fafaf8;
+  --accent: #176d72;
 
   --ok:     #2f6b45;
   --rerun:  #8a6410;
@@ -27,7 +27,10 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+  /* Inter first if the reader already has it. NOT fetched from Google
+     Fonts: the manual promises this page works with the network off, and
+     a web font would quietly break that. */
+  font: 16px/1.6 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -143,7 +146,7 @@ input[type="number"]:focus {
 .go {
   padding: .7rem 1.4rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--accent);
   color: #fff;
   font: inherit;
@@ -152,6 +155,18 @@ input[type="number"]:focus {
 }
 
 .go:hover { background: #10565c; }
+
+/* Keyboard focus was invisible before this: the browser default ring is
+   hidden by the button's own background on the teal control. */
+.go:focus-visible,
+.opt:focus-visible,
+.back:focus-visible,
+.why > summary:focus-visible,
+.more > summary:focus-visible,
+input[type="number"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .go.wide  { display: block; width: 100%; margin-top: 1.75rem; padding: .85rem; }
 
 .back {
@@ -370,48 +385,82 @@ footer p { margin: 0 0 .5rem; }
   .verdict h2 { font-size: 1.5rem; }
 }
 
-/* ----------------------------------------------------------------- home */
+/* ----------------------------------------------------------------- home
+   The landing screen only. body.at-home is set by home() and cleared by
+   screen(), so the wider measure and the larger masthead apply here and
+   nowhere else - a consultation still reads one question in a narrow
+   column, which is what the rest of this stylesheet is built around. */
 
-.lede {
-  margin: 0 0 1.6rem;
-  font-size: 1.02rem;
-  line-height: 1.6;
+body.at-home .wrap  { max-width: 48rem; padding-top: 3rem; }
+body.at-home .mast  { margin-bottom: 2.5rem; }
+body.at-home .mast h1 {
+  font-size: 2.15rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.022em;
 }
 
-.meta {
-  margin: 0 0 1.6rem;
-  display: grid;
-  grid-template-columns: 8.5rem 1fr;
-  gap: .55rem 1rem;
-  font-size: .88rem;
+/* The question the whole system settles, and the hypothesis every
+   certainty factor is belief about. */
+.hero {
+  margin: 0 0 .85rem;
+  font-size: 1.4rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -.015em;
 }
 
-/* The knowledge base's own statement of what it will and will not do. Set
-   apart, because it is quoted from kb/ rather than written here. */
+/* The knowledge base's own statement of what it will and will not do,
+   quoted from boundary/1 rather than written here. */
 .bound {
-  margin: 0 0 1.7rem;
-  padding-left: .9rem;
-  border-left: 2px solid var(--line);
-  font-size: .88rem;
-  line-height: 1.55;
+  margin: 0 0 2rem;
+  max-width: 34rem;
+  font-size: .95rem;
+  line-height: 1.6;
+  color: var(--soft);
+}
+
+.card {
+  margin: 0 0 1.75rem;
+  padding: 1.5rem 1.6rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.card .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6rem;
+  margin-top: 1.5rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.lbl {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
   color: var(--faint);
 }
 
-/* The standing note under the credits. Quieter than the lede above it. */
-.hint {
-  margin: 0 0 1.7rem;
-  font-size: .86rem;
-  line-height: 1.55;
+.val { margin: .35rem 0 0; font-size: .95rem; line-height: 1.5; }
+.val .sub { color: var(--soft); font-size: .85rem; }
+
+.note {
+  margin: .9rem 0 0;
+  text-align: center;
+  font-size: .8rem;
+  line-height: 1.5;
   color: var(--faint);
 }
 
-.meta dt { color: var(--faint); }
-.meta dd { margin: 0; }
-.meta .sub { color: var(--faint); font-size: .82rem; }
-
-@media (max-width: 30rem) {
-  .meta { grid-template-columns: 1fr; gap: .15rem; }
-  .meta dd { margin-bottom: .7rem; }
+@media (max-width: 34rem) {
+  body.at-home .wrap { max-width: none; }
+  body.at-home .mast h1 { font-size: 1.65rem; }
+  .card { padding: 1.25rem 1.2rem; }
+  .card .pair { grid-template-columns: 1fr; gap: 1.3rem; }
 }
 
 /* The certainty factor under the verdict. Quiet on purpose: it states a

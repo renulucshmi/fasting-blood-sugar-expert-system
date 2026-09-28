@@ -250,7 +250,12 @@
 
   // -------------------------------------------------------------- the screens
 
-  function screen(html) { el('stage').innerHTML = html; }
+  function screen(html) {
+    // Cleared here rather than in each caller: home() is the only screen
+    // that wants the wider measure, and it sets the class back afterwards.
+    document.body.classList.remove('at-home');
+    el('stage').innerHTML = html;
+  }
 
   function showQuestion(q) {
     var n = S.trace.length + 1;
@@ -584,29 +589,34 @@
   function home(boundary) {
     screen(
       '<div class="step">' +
-        '<p class="lede">A rule-based expert system for the laboratory bench. ' +
-        'Every consultation settles one question: <b>is this result fit to ' +
-        'release?</b></p>' +
+        '<h2 class="hero">Is this result fit to release?</h2>' +
         // boundary/1 is a fact in kb/, so what the page claims the system
         // does is the knowledge base's own sentence, not the interface's.
         '<p class="bound">' + esc(boundary) + '</p>' +
-        '<dl class="meta">' +
-          '<dt>Module</dt>' +
-          '<dd>CM 3321 &middot; Logic Programming and Artificial Cognitive Systems</dd>' +
-          '<dt>Built by</dt>' +
-          '<dd>Prakasan R. &middot; 224152U, University of Moratuwa</dd>' +
-          '<dt>Domain expert</dt>' +
-          '<dd>Shangavie Subramaniyam, BSc in Biomedical Science' +
-          '<br><span class="sub">Technical Officer, clinical laboratory</span></dd>' +
-          '<dt>Knowledge base</dt>' +
-          '<dd>Prolog, reasoned in your browser by Tau Prolog</dd>' +
-        '</dl>' +
-        '<p class="hint">It asks one question at a time and stops as soon as ' +
-        'nothing still unasked could change the answer. Every verdict comes ' +
-        'from a rule, and the reasoning is there to open. Nothing is sent ' +
-        'anywhere.</p>' +
-        '<button type="button" class="go wide" id="startBtn">Begin</button>' +
+        '<section class="card">' +
+          '<h3 class="lbl">Module</h3>' +
+          '<p class="val">CM 3321 &middot; Logic Programming and Artificial ' +
+          'Cognitive Systems</p>' +
+          '<div class="pair">' +
+            '<div>' +
+              '<h3 class="lbl">Developed by</h3>' +
+              '<p class="val">Prakasan R.' +
+              '<br><span class="sub">224152U &middot; University of Moratuwa</span></p>' +
+            '</div>' +
+            '<div>' +
+              '<h3 class="lbl">Domain expert</h3>' +
+              '<p class="val">Shangavie Subramaniyam' +
+              '<br><span class="sub">BSc in Biomedical Science' +
+              '<br>Technical Officer &middot; Clinical Laboratory</span></p>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+        '<button type="button" class="go wide" id="startBtn">' +
+          'Begin Consultation &rarr;</button>' +
+        '<p class="note">Runs locally in your browser using Tau Prolog. ' +
+        'No data is transmitted.</p>' +
       '</div>');
+    document.body.classList.add('at-home');
     el('startBtn').onclick = reset;
     el('startBtn').focus();
   }
