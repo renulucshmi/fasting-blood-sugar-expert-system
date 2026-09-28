@@ -138,7 +138,7 @@ of the two it is using.
 4. The system stops as soon as no remaining question could change the action.
    If some remaining questions still affect what must be *fixed*, it offers them
    rather than forcing them.
-5. Open **Why** on the result for the full chain: the input, the facts derived,
+5. Open **Show the reasoning** on the result for the full chain: the input, the facts derived,
    the rules applied, the reasoning, and the conclusion.
 
 ## Example input
@@ -156,7 +156,7 @@ of the two it is using.
 >
 > Fresh blood is needed. Re-running this tube would only repeat the error.
 >
-> **Why** →
+> **Show the reasoning** →
 > *Asked 1 of 12 questions. The other 11 were never put, because nothing still
 > unasked could rank above "Take a fresh sample NOW, and tell the senior".*
 >
@@ -215,7 +215,7 @@ the tests would be reasoning over different programs.
 
 ## How the knowledge is organised
 
-**75 rules and 207 facts**, in sixteen numbered sections across three files.
+**76 rules and 217 facts**, in sixteen numbered sections across three files.
 
 **Case facts** — what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
@@ -331,7 +331,15 @@ it. The interface never asked for `instruction/2` at all. So the sentence sat
 in the knowledge base, the decision depended on it, and the screen told the
 technologist to tell the patient something without saying what. `next_step/3`
 hands it back. The wrong-tube detail had the same shape: `fault_note/5` worked
-out which tube was needed and it was rendered only inside the *Why* panel.
+out which tube was needed and it was rendered only inside the reasoning panel.
+
+Every fault that sends the patient back for another needle now says what to do
+differently, and a test fails if one is ever added without it. The fasting
+question is read at both ends: too short a fast is `not_fasting`, and a fast
+far longer than asked is `over_fasted`, because that specimen is no longer the
+state the reference range was built on. Note the asymmetry in the sources -
+`min_fasting_hours/1` has a published figure behind it and `max_fasting_hours/1`
+does not, so the ceiling is marked as a working number and listed below.
 
 ---
 
@@ -341,13 +349,13 @@ out which tube was needed and it was rendered only inside the *Why* panel.
 node test/cases.js
 ```
 
-**69 tests in three layers.**
+**71 tests in three layers.**
 
 **38 knowledge-base cases.** Facts in, expected action out. Each one also
 checks *which rule fired*, because a right answer from the wrong rule is a bug
 waiting to surface.
 
-**19 structural invariants.** These test properties of the knowledge base
+**21 structural invariants.** These test properties of the knowledge base
 rather than single cases:
 
 - `fault_family/2` is the only thing that assigns a family, and editing one
@@ -365,6 +373,8 @@ rather than single cases:
 - a tube with no handling time left is never sent to a re-run in silence
 - an action that promises to tell the patient something actually says what,
   and the interface actually asks for it
+- the fasting question is read at both ends, and both ends give advice
+- every fault a fresh sample can fix says how to avoid it next time
 - the handling margin never contradicts the `delayed` fault: a specimen past
   the limit is compromised, not warned about a re-run it will not get
 
@@ -383,6 +393,14 @@ The suite exits non-zero if anything fails.
       system, and everything downstream reads it
 - [ ] Fill `method_effect/5`: nothing is recorded yet for what in-vitro
       haemolysis does to an HbA1c on any method, and the system says so
+- [ ] Confirm the upper fasting limit in `max_fasting_hours/1`. The guideline
+      gives a floor of eight hours and no ceiling, so sixteen is my working
+      number and nothing more
+- [ ] Confirm the wording of `instruction/2` for `label_mismatch`, `delayed`,
+      `haemolysed` and `clotted`. These are my drafting of standard practice,
+      not her words yet
+- [ ] Decide what, if anything, to advise for `lipaemic`. Lipaemia comes from
+      the patient rather than the collection, so it has no advice here
 - [ ] Confirm the priority order when two faults coexist
 - [ ] Confirm the plausibility, critical and delta limits against the lab's own
 - [ ] Add the faults the expert names that are not here yet

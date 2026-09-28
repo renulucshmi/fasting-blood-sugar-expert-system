@@ -445,7 +445,10 @@
     }
 
     // --- the explanation chain, folded away until asked for ---
-    h += '<details class="why"><summary>Why</summary><div class="whybody">';
+    h += '<details class="why"><summary>' +
+           '<span class="shut">Show the reasoning</span>' +
+           '<span class="open">Hide the reasoning</span>' +
+         '</summary><div class="whybody">';
 
     h += '<h3>User input</h3><ul>';
     if (S.vals.fbs !== null)   h += '<li>Fasting blood sugar <b>' + esc(S.vals.fbs) + '</b> mg/dL</li>';

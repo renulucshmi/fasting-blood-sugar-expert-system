@@ -374,6 +374,7 @@ const INVARIANTS = [
         wrong_tube:          'value(s,fbs,94). tube(s,fbs,plain). delay_hours(s,0). fasting_hours(s,10).',
         delayed:             'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,4). fasting_hours(s,10).',
         not_fasting:         'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,2).',
+        over_fasted:         'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,20).',
         drip_arm:            base + ' drip_arm(s).',
         label_mismatch:      base + ' label_mismatch(s).',
         transcription_doubt: base + ' transcription_doubt(s).'
@@ -381,8 +382,8 @@ const INVARIANTS = [
 
       const table = await load('');
       const entries = await query(table, 'fault_family(C, F).', ['C', 'F']);
-      if (entries.length !== 15) {
-        problems.push(`fault_family/2 has ${entries.length} entries, expected 15`);
+      if (entries.length !== 16) {
+        problems.push(`fault_family/2 has ${entries.length} entries, expected 16`);
       }
 
       for (const { C, F } of entries) {
@@ -1168,6 +1169,7 @@ const INVARIANTS = [
       const base = 'value(s,fbs,140). tube(s,fbs,fluoride). delay_hours(s,0).';
       const evidence = {
         not_fasting: 'fasting_hours(s,3).',
+        over_fasted: 'fasting_hours(s,20).',
         drip_arm:    'fasting_hours(s,10). drip_arm(s).'
       };
 
@@ -1204,7 +1206,96 @@ const INVARIANTS = [
       // inside the Why panel. It has to appear on the result itself.
       if (!APP_JS.includes('notes.wrong_tube')) {
         problems.push('the wrong-tube detail is not shown on the result, ' +
-                      'only inside the Why panel');
+                      'only inside the reasoning panel');
+      }
+      return problems;
+    }
+  }
+
+  ,{
+    name: 'the fasting question is read at both ends',
+    // One number, two faults. Too short a fast is not_fasting; a fast far
+    // longer than asked is over_fasted, because the specimen is no longer
+    // the state the reference range was built on. A rule that only ever
+    // looked for H < Min saw half the question.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+      const lo = await query(probe, 'min_fasting_hours(H).', ['H']);
+      const hi = await query(probe, 'max_fasting_hours(H).', ['H']);
+      if (!lo.length) return ['min_fasting_hours/1 is gone'];
+      if (!hi.length) return ['max_fasting_hours/1 is gone'];
+      const MIN = parseFloat(lo[0].H), MAX = parseFloat(hi[0].H);
+      if (!(MIN < MAX)) problems.push(`min ${MIN} is not below max ${MAX}`);
+
+      const base = 'value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0).';
+      const cases = [
+        [MIN - 1, 'not_fasting'],
+        [MIN,     null],
+        [MAX,     null],
+        [MAX + 1, 'over_fasted']
+      ];
+      for (const [hours, expected] of cases) {
+        const s = await load(`${base} fasting_hours(s,${hours}).`);
+        await query(s, 'forward_chain.');
+        const got = await query(s, 'fault(s, collection, C).', ['C']);
+        const names = got.map(r => r.C);
+        if (expected && !names.includes(expected)) {
+          problems.push(`${hours} hours: expected ${expected}, got ` +
+                        `${names.join(', ') || 'no collection fault'}`);
+        }
+        if (!expected && names.length) {
+          problems.push(`${hours} hours is inside the accepted range and ` +
+                        `still raised ${names.join(', ')}`);
+        }
+      }
+
+      // Both ends have to tell the patient something, or the action is a
+      // promise the system cannot keep.
+      for (const [hours, cause] of [[MIN - 1, 'not_fasting'], [MAX + 1, 'over_fasted']]) {
+        const s = await load(`${base} fasting_hours(s,${hours}).`);
+        await query(s, 'forward_chain.');
+        if (!(await query(s, `next_step(s, ${cause}, _).`)).length) {
+          problems.push(`${cause} has no advice to give`);
+        }
+      }
+      return problems;
+    }
+  }
+
+  ,{
+    name: 'every fault a fresh sample can fix says how to avoid it',
+    // The action label used to carry the whole message: "take a fresh
+    // sample" and nothing about what to do differently. Every cause that
+    // sends the patient back for another needle should say what changes.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+      const evidence = {
+        haemolysed:     'sample_state(s,haemolysed).',
+        clotted:        'sample_state(s,clotted).',
+        delayed:        'delay_hours(s,4).',
+        not_fasting:    'fasting_hours(s,2).',
+        over_fasted:    'fasting_hours(s,20).',
+        drip_arm:       'drip_arm(s).',
+        label_mismatch: 'label_mismatch(s).'
+      };
+      const base = 'value(s,fbs,94). tube(s,fbs,fluoride).';
+      for (const [cause, extra] of Object.entries(evidence)) {
+        const facts = base +
+          (extra.includes('delay_hours') ? '' : ' delay_hours(s,0).') +
+          (extra.includes('fasting_hours') ? '' : ' fasting_hours(s,10).') +
+          ' ' + extra;
+        const s = await load(facts);
+        await query(s, 'forward_chain.');
+        if (!(await query(s, `fault(s, _, ${cause}).`)).length) {
+          problems.push(`${cause} did not derive from its own evidence`);
+          continue;
+        }
+        if (!(await query(s, `next_step(s, ${cause}, _).`)).length) {
+          problems.push(`${cause} sends the patient back for another needle ` +
+                        `and says nothing about what to do differently`);
+        }
       }
       return problems;
     }

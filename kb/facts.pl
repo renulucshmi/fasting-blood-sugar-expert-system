@@ -118,6 +118,7 @@ fault_family(delayed,            sample).
 
 fault_family(not_fasting,        collection).
 fault_family(drip_arm,           collection).
+fault_family(over_fasted,        collection).
 
 fault_family(label_mismatch,     identity).
 fault_family(transcription_doubt, identity).
@@ -144,6 +145,11 @@ fault_effect(drip_arm, fbs, high,
     'a sample drawn near a running drip carries the drip fluid with it').
 % Not tied to one wavelength: how much lipaemia matters depends on the assay
 % design and the analyser's own interference limits.  [gap]
+% A fast far longer than asked is still a collection problem: the specimen is
+% not the standard fasting state the reference range assumes. Which way that
+% moves the number is not recorded here, and is not guessed.
+fault_effect(over_fasted, fbs, unclear,
+    'a fast much longer than asked is not the standard fasting state the reference range assumes, and nothing here records which way it moves the result').
 fault_effect(lipaemic, fbs, unclear,
     'turbidity interferes with the reading, by an amount that depends on the analyser and the method').
 fault_effect(qc_out, fbs, unclear,
@@ -197,6 +203,16 @@ instruction(not_fasting,
     'fast for at least 8 hours before the next draw - no food and no sugary drinks; plain water is allowed').
 instruction(drip_arm,
     'draw from the opposite arm, away from any running drip').
+instruction(over_fasted,
+    'keep the next fast within the hours the laboratory asks for - a much longer fast is not the state the reference range assumes').
+instruction(label_mismatch,
+    'check the patient identity against the request form before drawing again, and report the mismatch to the senior').
+instruction(delayed,
+    'separate the plasma from the cells within the laboratory handling limit this time').
+instruction(haemolysed,
+    'draw cleanly and do not force the blood through the needle when the fresh sample is taken').
+instruction(clotted,
+    'mix the tube gently and straight after drawing the fresh sample').
 
 % What has to be put right before the analyser is trusted again.
 %
@@ -228,6 +244,7 @@ fault_label(wrong_tube,          'the wrong tube was used').
 fault_label(delayed,             'sample sat too long before separation').
 fault_label(not_fasting,         'patient was not fasting').
 fault_label(drip_arm,            'drawn from the drip arm').
+fault_label(over_fasted,         'patient fasted much longer than asked').
 fault_label(label_mismatch,      'label does not match the request').
 fault_label(transcription_doubt, 'entry may have been typed wrongly').
 
@@ -248,6 +265,14 @@ family_label(identity,   'Identification or entry').
 max_delay_hours(fbs, 1).
 
 min_fasting_hours(8).
+
+% The other end of the same question. A fasting glucose is drawn after an
+% overnight fast; a fast far longer than that is no longer the state the
+% reference range was built on. UNLIKE the eight hours above, this ceiling
+% has no published figure behind it - the guideline gives a floor and no
+% ceiling. Sixteen is a working number and nothing more, so the fault it
+% raises is a prompt to ask, not a finding.  [local policy] [gap]
+max_fasting_hours(16).
 
 % The tube this knowledge base treats as correct. NOT a claim that fluoride
 % oxalate is universally the right glucose tube: sodium fluoride alone does

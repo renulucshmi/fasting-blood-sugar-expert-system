@@ -68,6 +68,11 @@ fault_condition(S, not_fasting) :-
     fasting_hours(S, H),
     min_fasting_hours(Min),
     H < Min.
+fault_condition(S, over_fasted) :-
+    value(S, fbs, _),
+    fasting_hours(S, H),
+    max_fasting_hours(Max),
+    H > Max.
 fault_condition(S, drip_arm) :-
     drip_arm(S).
 

@@ -206,6 +206,7 @@ still_useful(method) :-
 establishes(label,       label_mismatch).
 establishes(typed,       transcription_doubt).
 establishes(fasting,     not_fasting).
+establishes(fasting,     over_fasted).
 establishes(drip,        drip_arm).
 establishes(look,        haemolysed).
 establishes(look,        clotted).

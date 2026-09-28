@@ -181,24 +181,52 @@ input[type="number"]:focus {
 .more { margin: 1.5rem 0 0; }
 
 .more > summary,
+/* The only thing on a result page that can be clicked, so it has to look
+   like the option buttons the consultation used. A faint line of grey text
+   with a "+" in front did not read as a control at all. */
 .why > summary {
-  color: var(--faint);
-  font-size: .85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .6rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font-size: .9rem;
   cursor: pointer;
   list-style: none;
+  transition: border-color .12s, background .12s;
 }
+
+.why > summary:hover  { border-color: var(--accent); }
+.why > summary:active { background: #f4f7f7; }
+
+/* A chevron that turns over when the panel opens. */
+.why > summary::after {
+  content: "";
+  width: .38rem;
+  height: .38rem;
+  border-right: 1.5px solid var(--faint);
+  border-bottom: 1.5px solid var(--faint);
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform .15s ease;
+}
+
+.why[open] > summary::after { transform: rotate(-135deg) translateY(1px); }
+
+/* Both labels live in the markup; CSS shows whichever one applies. */
+.why[open] > summary .shut,
+.why:not([open]) > summary .open { display: none; }
 
 .more > summary::-webkit-details-marker,
 .why > summary::-webkit-details-marker { display: none; }
 
-.more > summary::before,
-.why > summary::before { content: "+ "; }
+.more > summary::before { content: "+ "; }
 
-.more[open] > summary::before,
-.why[open] > summary::before { content: "\2212  "; }
+.more[open] > summary::before { content: "\2212  "; }
 
-.more > summary:hover,
-.why > summary:hover { color: var(--accent); }
+.more > summary:hover { color: var(--accent); }
 
 .more[open] { padding-top: 1.1rem; }
 
