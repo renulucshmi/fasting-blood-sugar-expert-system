@@ -206,19 +206,55 @@ input[type="number"]:focus {
 
 pre.err { white-space: pre-wrap; font-size: .75rem; }
 
-.examples {
-  margin: 1.5rem 0 0;
-  color: var(--faint);
-  font-size: .82rem;
+/* ------------------------------------------------------------- the scale */
+
+/* A band bar under a number field. The segments are equal width on purpose:
+   this is a legend, not a ruler, and drawing 20 to 50 in proportion against
+   50 to 400 would leave it too thin to read. The numbers are on the labels. */
+
+.scale { margin: .6rem 0 0; }
+
+.bands { display: flex; gap: 2px; }
+
+.band {
+  position: relative;
+  flex: 1;
+  height: .45rem;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background .15s ease, transform .15s ease;
 }
 
-.examples a {
+.band em {
+  position: absolute;
+  top: .65rem;
+  left: 0;
+  right: 0;
+  font-style: normal;
+  font-size: .66rem;
+  text-align: center;
+  white-space: nowrap;
   color: var(--faint);
-  text-decoration: none;
-  border-bottom: 1px solid var(--line);
+  transition: color .15s ease;
 }
 
-.examples a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.band.on { transform: scaleY(1.7); }
+.band.on em { color: var(--ink); }
+
+.band.on.impossible { background: var(--urgent); }
+.band.on.critical   { background: var(--rerun); }
+.band.on.reportable { background: var(--ok); }
+
+.scalenote {
+  margin: 1.7rem 0 0;
+  min-height: 1.15em;
+  font-size: .78rem;
+  color: var(--faint);
+}
+
+.scalenote.impossible { color: var(--urgent); }
+.scalenote.critical   { color: var(--rerun); }
+.scalenote.reportable { color: var(--ok); }
 
 /* ----------------------------------------------------------------- verdict */
 
@@ -340,6 +376,37 @@ footer p { margin: 0 0 .5rem; }
   .wrap { padding: 2.5rem 1.25rem 3rem; }
   .q { font-size: 1.3rem; }
   .verdict h2 { font-size: 1.5rem; }
+  .band em { font-size: .6rem; }
+}
+
+/* On a wide screen the single centred column left most of the display empty.
+   Widening the reading measure would not help, so the standing explanation
+   moves alongside the consultation instead of below it. The column itself
+   stays narrow, because one question at a time is still the point. */
+
+@media (min-width: 60rem) {
+  .wrap {
+    max-width: 64rem;
+    display: grid;
+    grid-template-columns: minmax(0, 20rem) minmax(0, 24rem);
+    grid-template-areas:
+      "mast  mast"
+      "stage aside";
+    column-gap: 5rem;
+    justify-content: center;
+  }
+
+  .mast  { grid-area: mast; }
+  #stage { grid-area: stage; }
+
+  footer {
+    grid-area: aside;
+    margin-top: .4rem;
+    padding-top: 0;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    padding-left: 2rem;
+  }
 }
 
 .whybody .note { color: var(--faint); font-size: .84rem; }

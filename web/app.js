@@ -504,17 +504,98 @@
 
   // ------------------------------------------------------------------- start
 
+  // The scale drawn under each number field. It shows where a typed value
+  // sits and where the system stops believing the number at all.
+  //
+  // CAUTION. These edges are a copy of section 5 of kb/facts.pl
+  // (survivable_low/high, critical_low/high, impossible_low/high) and of the
+  // comparisons in section 3 of kb/rules.pl, where `critical` uses =< and >=
+  // while `implausible` uses a strict < and >. That is why 50 reads as
+  // critically low and 51 does not. The knowledge base is still the only
+  // thing that decides anything; this draws a picture of it. But a limit
+  // changed in kb/facts.pl has to be changed here by hand, or the picture
+  // will quietly disagree with the verdict that follows it.
+  var SCALE = {
+    fbs: {
+      unit: 'mg/dL',
+      bands: [
+        { kind: 'impossible', edge: 'under 20',  label: 'not a possible result',
+          holds: function (v) { return v < 20; } },
+        { kind: 'critical',   edge: '20 to 50',  label: 'critically low',
+          holds: function (v) { return v >= 20 && v <= 50; } },
+        { kind: 'reportable', edge: '50 to 400', label: 'within the reportable range',
+          holds: function (v) { return v > 50 && v < 400; } },
+        { kind: 'critical',   edge: '400 to 800', label: 'critically high',
+          holds: function (v) { return v >= 400 && v <= 800; } },
+        { kind: 'impossible', edge: 'over 800',  label: 'not a possible result',
+          holds: function (v) { return v > 800; } }
+      ]
+    },
+    hba1c: {
+      unit: '%',
+      bands: [
+        { kind: 'impossible', edge: 'under 3',  label: 'below what the assay reports',
+          holds: function (v) { return v < 3.0; } },
+        { kind: 'reportable', edge: '3 to 20',  label: 'within the reportable range',
+          holds: function (v) { return v >= 3.0 && v <= 20.0; } },
+        { kind: 'impossible', edge: 'over 20',  label: 'above what the assay reports',
+          holds: function (v) { return v > 20.0; } }
+      ]
+    }
+  };
+
+  var SCALE_REST = 'The bar marks where this number stops being believable.';
+
+  function scaleHtml(test) {
+    var s = SCALE[test];
+    if (!s) return '';
+    return '<div class="scale">' +
+        '<div class="bands">' +
+          s.bands.map(function (b, i) {
+            return '<span class="band ' + b.kind + '" id="seg_' + test + '_' + i + '">' +
+                     '<em>' + b.edge + '</em></span>';
+          }).join('') +
+        '</div>' +
+        '<p class="scalenote" id="note_' + test + '">' + SCALE_REST + '</p>' +
+      '</div>';
+  }
+
+  // Repaint the bar for whatever is currently typed. Nothing here is a
+  // verdict: the consultation still asks Prolog when Begin is pressed.
+  function markScale(test) {
+    var s = SCALE[test], input = el('v_' + test), note = el('note_' + test);
+    if (!s || !input || !note) return;
+    var raw = input.value.trim();
+    var v = raw === '' ? NaN : parseFloat(raw);
+    var hit = -1;
+    if (!isNaN(v)) {
+      for (var i = 0; i < s.bands.length; i++) {
+        if (s.bands[i].holds(v)) { hit = i; break; }
+      }
+    }
+    s.bands.forEach(function (b, i) {
+      var seg = el('seg_' + test + '_' + i);
+      if (seg) seg.className = 'band ' + b.kind + (i === hit ? ' on' : '');
+    });
+    note.className = 'scalenote' + (hit < 0 ? '' : ' ' + s.bands[hit].kind);
+    note.textContent = hit < 0
+      ? SCALE_REST
+      : v + ' ' + s.unit + ', ' + s.bands[hit].label;
+  }
+
   function reset() {
     screen(
       '<div class="step">' +
         '<h2 class="q">Enter the result</h2>' +
         '<div class="field"><label for="v_fbs">Fasting blood sugar</label>' +
           '<div class="numrow"><input type="number" step="1" id="v_fbs" autocomplete="off">' +
-          '<span class="unit">mg/dL</span></div></div>' +
+          '<span class="unit">mg/dL</span></div>' +
+          scaleHtml('fbs') + '</div>' +
         '<details class="more"><summary>Add HbA1c or a previous result</summary>' +
           '<div class="field"><label for="v_hba1c">HbA1c</label>' +
             '<div class="numrow"><input type="number" step="0.1" id="v_hba1c">' +
-            '<span class="unit">%</span></div></div>' +
+            '<span class="unit">%</span></div>' +
+            scaleHtml('hba1c') + '</div>' +
           '<div class="field"><label for="v_prev_fbs">Last fasting sugar</label>' +
             '<div class="numrow"><input type="number" step="1" id="v_prev_fbs">' +
             '<span class="unit">mg/dL</span></div></div>' +
@@ -524,22 +605,15 @@
         '</details>' +
         '<p class="err" id="startErr"></p>' +
         '<button type="button" class="go wide" id="beginBtn">Begin</button>' +
-        '<p class="examples">Try &nbsp;' +
-          '<a href="#" data-ex="61">61</a> &middot; ' +
-          '<a href="#" data-ex="94">94</a> &middot; ' +
-          '<a href="#" data-ex="350">350</a> &middot; ' +
-          '<a href="#" data-ex="12">12</a>' +
-        '</p>' +
       '</div>');
     el('beginBtn').onclick = begin;
     el('v_fbs').focus();
     el('v_fbs').onkeydown = function (e) { if (e.key === 'Enter') begin(); };
-    Array.prototype.forEach.call(document.querySelectorAll('[data-ex]'), function (a) {
-      a.onclick = function (e) {
-        e.preventDefault();
-        el('v_fbs').value = a.getAttribute('data-ex');
-        begin();
-      };
+    ['fbs', 'hba1c'].forEach(function (test) {
+      var input = el('v_' + test);
+      if (!input) return;
+      input.oninput = function () { markScale(test); };
+      markScale(test);
     });
   }
 
