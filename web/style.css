@@ -333,6 +333,22 @@ pre.err { white-space: pre-wrap; font-size: .75rem; }
   font-size: .88rem;
 }
 
+/* What has to be put right, listed under one heading instead of repeating
+   the heading in front of every item. */
+.todo {
+  margin: 1rem 0 0;
+  padding: .85rem 1rem .9rem;
+  border-radius: 8px;
+  background: #fbf3ea;
+  color: var(--soft);
+  font-size: .88rem;
+}
+
+.todo .lbl { margin: 0; color: #8a6410; }
+
+.todo ul { margin: .5rem 0 0; padding-left: 1.15rem; }
+.todo li { margin: .2rem 0; }
+
 /* ------------------------------------------------------------- explanation */
 
 .why { margin-top: 2.25rem; border-top: 1px solid var(--line); padding-top: 1.1rem; }

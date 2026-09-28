@@ -456,10 +456,10 @@ consistency_reason(real, high,
     'this result is high and nothing found in the run pushes it that way, so treat the high value as the patient''s own until proved otherwise').
 
 % What the interface prefixes an also_fix/2 cause with.
-also_fix_prefix('Fix this before running the new sample:').
+also_fix_heading('Fix before running the new sample').
 
 % And what it prefixes a fix_before_rerun/3 instruction with.
-fix_first_prefix('Put this right before the re-run:').
+fix_first_heading('Put right before the re-run').
 
 % How each band is read aloud on the result.
 certainty_words(certain,  'this is the usual cause of a result moving this way').
@@ -470,7 +470,7 @@ certainty_words(possible, 'this can move a result this way, but not always').
 % instruction/2 holds advice for whoever acts on it next, and that is not
 % always the patient. "Fast for eight hours" is for the patient; "draw from
 % the opposite arm" is for whoever takes the fresh sample.
-next_step_prefix('For the fresh sample:').
+next_step_heading('For the fresh sample').
 
 % Said when a re-run is the right action but the tube has no handling time
 % left to survive the correction that has to come first.

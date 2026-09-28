@@ -332,7 +332,7 @@
       { q: 'decision(s, A, W), action_label(A, L).',                    vars: ['A', 'W', 'L'] },
       { q: 'fault(s, F, C), fault_label(C, CL), family_label(F, FL).',  vars: ['F', 'C', 'CL', 'FL'] },
       { q: 'specimen_intact(s).',                                       vars: null },
-      { q: 'also_fix(s, C), fault_label(C, L), also_fix_prefix(P).',    vars: ['C', 'L', 'P'] },
+      { q: 'also_fix(s, C), fault_label(C, L), also_fix_heading(P).',   vars: ['C', 'L', 'P'] },
       { q: 'critical(s, T, D), value(s, T, V).',                        vars: ['T', 'D', 'V'] },
       { q: 'accounts_for(s, T, C, W), fault_label(C, CL).',             vars: ['C', 'CL', 'W'] },
       { q: 'does_not_account_for(s, T, C, W), fault_label(C, CL).',     vars: ['C', 'CL', 'W'] },
@@ -347,9 +347,9 @@
       { q: 'stopped_early(W).',                                         vars: ['W'] },
       { q: 'method_in_use(s, N).',                                      vars: ['N'] },
       { q: 'method_not_recorded(s, W).',                                vars: ['W'] },
-      { q: 'fix_before_rerun(s, C, W), fix_first_prefix(P).',           vars: ['C', 'W', 'P'] },
+      { q: 'fix_before_rerun(s, C, W), fix_first_heading(P).',          vars: ['C', 'W', 'P'] },
       { q: 'no_margin_for_rerun(s, T), no_margin_text(W).',             vars: ['T', 'W'] },
-      { q: 'next_step(s, C, W), next_step_prefix(P).',                  vars: ['C', 'W', 'P'] },
+      { q: 'next_step(s, C, W), next_step_heading(P).',                 vars: ['C', 'W', 'P'] },
       { q: 'explanation_certainty(s, T, C, B, CF), certainty_words(B, W).',
         vars: ['T', 'C', 'B', 'CF', 'W'] },
       { q: 'release_standing(s, CF, Term, H).',                         vars: ['CF', 'Term', 'H'] }
@@ -361,6 +361,15 @@
     var n = parseFloat(v);
     if (isNaN(n)) return String(v);
     return (n > 0 ? '+' : '') + n.toFixed(1);
+  }
+
+  // A heading once, then what falls under it. Every one of these blocks used
+  // to repeat its heading in front of each item.
+  function todo(rows, text) {
+    if (!rows.length) return '';
+    var h = '<div class="todo"><p class="lbl">' + esc(rows[0].P) + '</p><ul>';
+    rows.forEach(function (x) { h += '<li>' + esc(cap(text(x))) + '</li>'; });
+    return h + '</ul></div>';
   }
 
   function cap(s) {
@@ -435,10 +444,14 @@
     // patient advice in instruction/2, via next_step/3, and the tube detail
     // that fault_note/5 already works out. Both used to be reachable only
     // from inside the Why panel, or not at all.
-    if (nextStep.length || notes.wrong_tube) {
+    // Same heading-then-list shape as the other two. The tube note is a
+    // statement of what went wrong rather than an instruction, so it keeps
+    // its own line instead of sitting under "For the fresh sample".
+    h += todo(nextStep, function (x) { return x.W; });
+
+    if (notes.wrong_tube) {
       h += '<p class="crit">';
-      nextStep.forEach(function (x) { h += esc(x.P + ' ' + x.W) + '. '; });
-      (notes.wrong_tube || []).forEach(function (n) { h += esc(cap(n)) + '. '; });
+      notes.wrong_tube.forEach(function (n) { h += esc(cap(n)) + '. '; });
       h += '</p>';
     }
 
@@ -452,19 +465,11 @@
       h += '</p>';
     }
 
-    if (alsoFix.length) {
-      h += '<p class="crit">';
-      alsoFix.forEach(function (x) { h += esc(x.P + ' ' + x.L) + '. '; });
-      h += '</p>';
-    }
+    h += todo(alsoFix, function (x) { return x.L; });
 
     // The specimen is sound, so the action is a re-run - which would repeat
     // the fault unless the analyser is put right first. See fix_before_rerun/3.
-    if (fixFirst.length) {
-      h += '<p class="crit">';
-      fixFirst.forEach(function (x) { h += esc(x.P + ' ' + x.W) + '. '; });
-      h += '</p>';
-    }
+    h += todo(fixFirst, function (x) { return x.W; });
 
     // The re-run is right, but it cannot happen until the analyser is put
     // right, and this tube has no handling time left to wait. See
