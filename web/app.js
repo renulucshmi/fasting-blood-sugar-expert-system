@@ -342,7 +342,8 @@
       { q: 'stopped_early(W).',                                         vars: ['W'] },
       { q: 'method_in_use(s, N).',                                      vars: ['N'] },
       { q: 'method_not_recorded(s, W).',                                vars: ['W'] },
-      { q: 'fix_before_rerun(s, C, W), fix_first_prefix(P).',           vars: ['C', 'W', 'P'] }
+      { q: 'fix_before_rerun(s, C, W), fix_first_prefix(P).',           vars: ['C', 'W', 'P'] },
+      { q: 'no_margin_for_rerun(s, T), no_margin_text(W).',             vars: ['T', 'W'] }
     ]).then(render).catch(fail);
   }
 
@@ -366,6 +367,7 @@
     var intact = r[2].length > 0;
     var alsoFix = uniq(r[3], function (x) { return x.C; });
     var fixFirst = uniq(r[18], function (x) { return x.C; });
+    var noMargin = uniq(r[19], function (x) { return x.W; });
     var crit = uniq(r[4], function (x) { return x.T + x.D; });
     var fits = uniq(r[5], function (x) { return x.C; });
     var clash = uniq(r[6], function (x) { return x.C; });
@@ -415,6 +417,16 @@
     if (fixFirst.length) {
       h += '<p class="crit">';
       fixFirst.forEach(function (x) { h += esc(x.P + ' ' + x.W) + '. '; });
+      h += '</p>';
+    }
+
+    // The re-run is right, but it cannot happen until the analyser is put
+    // right, and this tube has no handling time left to wait. See
+    // no_margin_for_rerun/2 - the system states the margin, it does not
+    // pretend to know how long the correction takes.
+    if (noMargin.length) {
+      h += '<p class="crit">';
+      noMargin.forEach(function (x) { h += esc(x.W) + ' '; });
       h += '</p>';
     }
 

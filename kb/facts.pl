@@ -339,3 +339,7 @@ also_fix_prefix('Fix this before running the new sample:').
 
 % And what it prefixes a fix_before_rerun/3 instruction with.
 fix_first_prefix('Put this right before the re-run:').
+
+% Said when a re-run is the right action but the tube has no handling time
+% left to survive the correction that has to come first.
+no_margin_text('This tube has already used all of its handling time, and the analyser has to be put right before it can be run again. If that correction is not immediate, take fresh blood rather than re-running this tube.').

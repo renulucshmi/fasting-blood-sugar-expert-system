@@ -215,7 +215,7 @@ the tests would be reasoning over different programs.
 
 ## How the knowledge is organised
 
-**72 rules and 205 facts**, in sixteen numbered sections across three files.
+**74 rules and 206 facts**, in sixteen numbered sections across three files.
 
 **Case facts** — what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
@@ -311,6 +311,19 @@ mirror of `also_fix/2` for that case: it reads `fix_first/2` and names what has
 to be put right first. Every machine-family cause must have an entry there, and
 a test fails if one is ever added without it.
 
+**And the tube has to survive that correction.** `specimen_intact/1` asks
+whether the blood is sound *now*. A re-run does not happen now: the analyser is
+put right first, and the tube goes on ageing while that happens. A specimen
+sitting exactly on `max_delay_hours/2` is intact and still cannot be inside
+that limit by the time the re-run runs. `handling_margin/3` works out what is
+left of the window and `no_margin_for_rerun/2` says so on the result.
+
+It stops there deliberately. The system does not know how long a correction
+takes, so it states the margin and leaves that judgement to the technologist,
+the same way `boundary/1` leaves the clinical reading to the clinician.
+Inventing a correction time would have been the easier rule and the dishonest
+one.
+
 ---
 
 ## Testing
@@ -319,13 +332,13 @@ a test fails if one is ever added without it.
 node test/cases.js
 ```
 
-**66 tests in three layers.**
+**68 tests in three layers.**
 
 **38 knowledge-base cases.** Facts in, expected action out. Each one also
 checks *which rule fired*, because a right answer from the wrong rule is a bug
 waiting to surface.
 
-**16 structural invariants.** These test properties of the knowledge base
+**18 structural invariants.** These test properties of the knowledge base
 rather than single cases:
 
 - `fault_family/2` is the only thing that assigns a family, and editing one
@@ -340,6 +353,9 @@ rather than single cases:
 - a re-run is never ordered without naming what to put right first
 - the two corrective paths, `also_fix/2` and `fix_before_rerun/3`, never both
   fire and never both stay silent
+- a tube with no handling time left is never sent to a re-run in silence
+- the handling margin never contradicts the `delayed` fault: a specimen past
+  the limit is compromised, not warned about a re-run it will not get
 
 **12 consultations.** These drive the whole thing end to end — the real
 question order, the real stopping rule, and the real answer-to-fact mapping

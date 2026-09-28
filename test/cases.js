@@ -1082,6 +1082,77 @@ const INVARIANTS = [
       return problems;
     }
   }
+
+  ,{
+    name: 'a re-run is not ordered blind when the tube has no time left',
+    // specimen_intact/1 asks whether the blood is sound NOW. The re-run does
+    // not happen now: the analyser has to be corrected first, and the tube
+    // goes on ageing while that happens. A tube sitting exactly on
+    // max_delay_hours is intact, and yet cannot still be inside that limit by
+    // the time the re-run runs. The system used to answer "re-run the same
+    // sample" and say nothing about it.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+      const lim = await query(probe, 'max_delay_hours(fbs, M).', ['M']);
+      if (!lim.length) return ['max_delay_hours(fbs, _) no longer exists'];
+      const M = parseFloat(lim[0].M);
+      const base = 'value(s,fbs,94). tube(s,fbs,fluoride). fasting_hours(s,10).';
+
+      const onLimit = await load(`${base} delay_hours(s,${M}). qc_status(s,fbs,out_of_range).`);
+      await query(onLimit, 'forward_chain.');
+      const dec = await query(onLimit, 'decision(s, A, _).', ['A']);
+      if (!dec.length || dec[0].A !== 'rerun_same_sample') {
+        problems.push(`on the limit: expected rerun_same_sample, got ` +
+                      `${dec.length ? dec[0].A : 'no decision'}`);
+      }
+      if (!(await query(onLimit, 'no_margin_for_rerun(s, fbs).')).length) {
+        problems.push(`a tube on its ${M}-hour handling limit was sent to a ` +
+                      `re-run with no warning that it has no time left`);
+      }
+
+      // Freshly separated: no warning, or it would fire on every re-run.
+      const fresh = await load(`${base} delay_hours(s,0). qc_status(s,fbs,out_of_range).`);
+      await query(fresh, 'forward_chain.');
+      if ((await query(fresh, 'no_margin_for_rerun(s, _).')).length) {
+        problems.push('a freshly separated tube was warned about its handling margin');
+      }
+
+      // No machine fault means no re-run, so there is nothing to warn about.
+      const noFault = await load(`${base} delay_hours(s,${M}).`);
+      await query(noFault, 'forward_chain.');
+      if ((await query(noFault, 'no_margin_for_rerun(s, _).')).length) {
+        problems.push('the margin warning fired with no machine fault, so no re-run');
+      }
+      return problems;
+    }
+  }
+
+  ,{
+    name: 'the handling margin never contradicts the delayed fault',
+    // handling_margin/3 and fault_condition(_, delayed) read the same two
+    // facts. A tube past the limit must be delayed and compromised - it must
+    // never instead be warned about a re-run it is not going to get.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+      const lim = await query(probe, 'max_delay_hours(fbs, M).', ['M']);
+      if (!lim.length) return ['max_delay_hours(fbs, _) no longer exists'];
+      const M = parseFloat(lim[0].M);
+
+      const over = await load(
+        `value(s,fbs,94). tube(s,fbs,fluoride). fasting_hours(s,10). ` +
+        `delay_hours(s,${M + 1}). qc_status(s,fbs,out_of_range).`);
+      await query(over, 'forward_chain.');
+      if (!(await query(over, 'fault(s, sample, delayed).')).length) {
+        problems.push(`a tube ${M + 1} hours old did not fire the delayed fault`);
+      }
+      if ((await query(over, 'no_margin_for_rerun(s, _).')).length) {
+        problems.push('an already-delayed tube was given the re-run margin warning');
+      }
+      return problems;
+    }
+  }
 ];
 
 // ------------------------------------------------- integration: consultations

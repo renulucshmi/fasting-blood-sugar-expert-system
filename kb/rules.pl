@@ -135,6 +135,32 @@ forward_chain.
 specimen_intact(S) :-
     \+ specimen_compromised(S).
 
+% How much of the specimen's handling window is left.
+%
+% delay_hours/2 is how long the tube has already waited; max_delay_hours/2 is
+% how long it may. A tube already over the limit has fired the `delayed` fault
+% and is compromised, so this only ever describes one still inside its window.
+handling_margin(S, Test, Left) :-
+    value(S, Test, _),
+    max_delay_hours(Test, Limit),
+    delay_hours(S, Used),
+    Left is Limit - Used.
+
+% specimen_intact/1 asks whether the blood is sound NOW. A re-run does not
+% happen now: the analyser has to be put right first, and the tube goes on
+% ageing while that happens. A tube sitting exactly on its handling limit is
+% intact and yet cannot still be inside that limit when the re-run finally
+% runs, however quick the correction is.
+%
+% The system does NOT know how long a correction takes and does not pretend
+% to. It states the margin and leaves that judgement to the technologist, the
+% same way boundary/1 leaves the clinical reading to the clinician.
+no_margin_for_rerun(S, Test) :-
+    fault(S, machine, _),
+    specimen_intact(S),
+    handling_margin(S, Test, Left),
+    Left =< 0.
+
 % ----------------------------------------------------------------------------
 %  3.  RULES  -  is the number itself believable?
 % ----------------------------------------------------------------------------
