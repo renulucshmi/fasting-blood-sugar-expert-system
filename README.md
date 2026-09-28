@@ -3,8 +3,8 @@
 A laboratory-side expert system written in Prolog, running in the browser
 through [Tau Prolog](http://tau-prolog.org/).
 
-**CM 3321 — Logic Programming and Artificial Cognitive Systems**
-Prakasan R. — 224152U, University of Moratuwa
+**CM 3321: Logic Programming and Artificial Cognitive Systems**
+Prakasan R. (224152U), University of Moratuwa
 
 ---
 
@@ -18,7 +18,7 @@ Prakasan R. — 224152U, University of Moratuwa
 ## The domain
 
 **What the system specialises in.** The release of fasting blood glucose and
-HbA1c results from a clinical laboratory. Not their clinical meaning — their
+HbA1c results from a clinical laboratory. Not their clinical meaning, but their
 fitness to leave the bench.
 
 **What problem it solves.** A result has come off the analyser and something
@@ -39,10 +39,10 @@ is bled again:
 
 | Family | Examples | What it means for the tube |
 | --- | --- | --- |
-| **machine** | QC out of range, expired reagent lot, calibration overdue, probe clot, carryover, analyser not cleaned | The blood is innocent — **re-run the same sample** |
-| **sample** | haemolysed, clotted, lipaemic, wrong tube, sat too long | The specimen cannot give a sound result — **fresh blood** |
+| **machine** | QC out of range, expired reagent lot, calibration overdue, probe clot, carryover, analyser not cleaned | The blood is innocent, so **re-run the same sample** |
+| **sample** | haemolysed, clotted, lipaemic, wrong tube, sat too long | The specimen cannot give a sound result, so **fresh blood** |
 | **collection** | not fasting, drawn from the drip arm | **Fresh blood**, and the patient has to be told something |
-| **identity** | label mismatch, transcription doubt | Depends — a label mismatch is urgent, a typing doubt needs no blood at all |
+| **identity** | label mismatch, transcription doubt | Depends: a label mismatch is urgent, a typing doubt needs no blood at all |
 
 Two consultations on the same number, 61 mg/dL:
 
@@ -53,7 +53,7 @@ Two consultations on the same number, 61 mg/dL:
 
 `fault_family/2` is the single source of that classification. Change one line
 of it and the system reclassifies the fault, the specimen decision follows, and
-the action changes — with no other edit anywhere. A test enforces that.
+the action changes, with no other edit anywhere. A test enforces that.
 
 ## How it reasons
 
@@ -79,7 +79,7 @@ worse-ranked action. A label mismatch settles the case after **one question out
 of twelve**, and the system says so and why.
 
 It will not stop on ignorance. An action whose rule rests on the *absence* of a
-fault — `correct_entry` requires no sample, collection or machine fault — is
+fault (`correct_entry` requires no sample, collection or machine fault) is
 only trusted once every question that could establish one has been asked.
 Negation as failure over an incomplete fact base is ignorance, not absence.
 
@@ -91,7 +91,7 @@ is a Medical Laboratory Technologist, not a doctor. `boundary/1` states this and
 the page prints it on every result.
 
 It also does not infer the fault from the value. A fasting glucose of 240 could
-mean the patient did not fast, or it could mean diabetes — and a system that
+mean the patient did not fast, or it could mean diabetes, and a system that
 guessed the first would explain away the finding the test exists to detect.
 
 ---
@@ -114,7 +114,7 @@ None. Copy the folder anywhere and open it.
 ## Required dependencies
 
 None to install. Tau Prolog 0.3.4 is vendored in `web/vendor/` so the system runs with
-no internet connection at all. Disconnect your network and it still works —
+no internet connection at all. Disconnect your network and it still works:
 nothing is sent anywhere, no server, no storage.
 
 ## How to start the system
@@ -160,14 +160,14 @@ of the two it is using.
 > *Asked 1 of 12 questions. The other 11 were never put, because nothing still
 > unasked could rank above "Take a fresh sample NOW, and tell the senior".*
 >
-> **Facts derived** — `fault(s, identity, label_mismatch)`, `specimen_compromised(s)`
-> **Rules applied** — the two forward-chaining clauses, `decision/3`, and the
+> **Facts derived:** `fault(s, identity, label_mismatch)`, `specimen_compromised(s)`
+> **Rules applied:** the two forward-chaining clauses, `decision/3`, and the
 > `possible_action/3` clause that fired
 
 ## Any other configuration
 
 None. If you edit anything in `kb/` and are opening `web/index.html` directly rather than
-through `run.bat`, run `build.bat` afterwards — see below.
+through `run.bat`, run `build.bat` afterwards. See below.
 
 ---
 
@@ -207,7 +207,7 @@ Fasting blood sugar/
 
 The knowledge base is consulted in one order, **`facts.pl` then `rules.pl`
 then `decisions.pl`**, and nothing in an earlier file depends on a later one.
-Three places load it — `build.py`, `web/app.js` and `test/cases.js` — and a
+Three places load it (`build.py`, `web/app.js` and `test/cases.js`), and a
 test checks that all three lists agree, because if they drifted the page and
 the tests would be reasoning over different programs.
 
@@ -217,7 +217,7 @@ the tests would be reasoning over different programs.
 
 **71 rules and 198 facts**, in sixteen numbered sections across three files.
 
-**Case facts** — what is true of one run. Built from the answers each time, so
+**Case facts:** what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
 
 ```prolog
@@ -227,7 +227,7 @@ delay_hours(s, 4).
 qc_status(s, fbs, out_of_range).
 ```
 
-**Domain facts** — what is true in general. The fault-to-family table, what
+**Domain facts:** what is true in general. The fault-to-family table, what
 each fault does to which test, the plausibility limits, the priority order of
 the actions, the questions and their options.
 
@@ -236,7 +236,7 @@ fault_family(qc_out,     machine).
 fault_family(haemolysed, sample).
 ```
 
-**Rules** — how the two are combined.
+**Rules:** how the two are combined.
 
 ### The rules worth reading
 
@@ -284,7 +284,7 @@ settled(S, LowestUnasked) :-
 ```
 
 **Finding a fault and explaining the result are different questions.** A delay
-lowers glucose, so it cannot account for a *high* result — and the system says
+lowers glucose, so it cannot account for a *high* result, and the system says
 so, rather than letting a real abnormality be written off as a sample problem.
 There are four outcomes, not two:
 
@@ -293,7 +293,7 @@ There are four outcomes, not two:
 | **Consistent** | The fault pushes the result the way it actually went |
 | **Does not fit** | The fault pushes the opposite way, so it is not the cause |
 | **Cannot say** | The fault affects this test in an unpredictable direction |
-| **Not recorded** | Nothing records what this fault does to this test — a gap, not a finding |
+| **Not recorded** | Nothing records what this fault does to this test: a gap, not a finding |
 
 That last row matters. Silence in `fault_effect/4` is a gap in the knowledge
 base, not evidence of no effect, and treating it as evidence produced false
@@ -329,7 +329,7 @@ rather than single cases:
 - silence in `fault_effect/4` never becomes "probably real"
 - a broken rule is reported, never answered as "release"
 
-**12 consultations.** These drive the whole thing end to end — the real
+**12 consultations.** These drive the whole thing end to end: the real
 question order, the real stopping rule, and the real answer-to-fact mapping
 lifted out of `web/app.js` rather than restated, because a copy would drift. Several
 assert the exact list of questions asked, in order.
@@ -340,7 +340,7 @@ The suite exits non-zero if anything fails.
 
 ## Still to do
 
-- [ ] Get the fault-to-family table corrected by the expert — that table is the
+- [ ] Get the fault-to-family table corrected by the expert: that table is the
       system, and everything downstream reads it
 - [ ] Fill `method_effect/5`: nothing is recorded yet for what in-vitro
       haemolysis does to an HbA1c on any method, and the system says so
@@ -352,8 +352,8 @@ The suite exits non-zero if anything fails.
 ## Sources
 
 Assay interference and the method-dependence of HbA1c:
-[NGSP — HbA1c Assay Interferences](https://ngsp.org/interf.asp) and
-[NGSP — Factors that Interfere with HbA1c Test Results](https://ngsp.org/factors.asp).
+[NGSP: HbA1c Assay Interferences](https://ngsp.org/interf.asp) and
+[NGSP: Factors that Interfere with HbA1c Test Results](https://ngsp.org/factors.asp).
 
 ## Licence
 
