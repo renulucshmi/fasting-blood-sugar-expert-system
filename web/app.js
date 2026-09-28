@@ -586,25 +586,22 @@
   // What the system is, who it came from, and one button. The description is
   // not written here: boundary/1 is a fact in kb/, so the page says what the
   // knowledge base says it does and the two cannot drift apart.
-  function home(boundary) {
+  function home() {
     screen(
       '<div class="step">' +
         '<h2 class="hero">Is this result fit to release?</h2>' +
         // Nothing between the question and the way to answer it. A paragraph
         // sat here before and pushed the button down the page.
         '<button type="button" class="go wide cta" id="startBtn">' +
-          'Begin Consultation &rarr;</button>' +
+          'Begin Consultation</button>' +
         '<p class="note">Runs locally in your browser using Tau Prolog. ' +
         'No data is transmitted.</p>' +
         // Reference, not the point of the page, so it sits after the action
         // and is set quietly. The marker still finds the expert in one look.
+        // boundary/1 was quoted here too. It is printed at the foot of every
+        // verdict already, and repeating it was the single largest block on
+        // the page - enough to push the credits off a short screen.
         '<section class="credits">' +
-          '<div class="span">' +
-            // boundary/1 is a fact in kb/, so what the page claims the system
-            // does is the knowledge base's own sentence, not the interface's.
-            '<h3 class="lbl">Scope</h3>' +
-            '<p class="val"><span class="sub">' + esc(boundary) + '</span></p>' +
-          '</div>' +
           '<div>' +
             '<h3 class="lbl">Module</h3>' +
             '<p class="val">CM 3321' +
@@ -699,9 +696,7 @@
   // just goes straight to the entry screen rather than showing nothing.
   loadKnowledgeBase().then(function (text) {
     KB = text;
-    run('', [{ q: 'boundary(B).', vars: ['B'] }])
-      .then(function (r) { home(r[0][0] ? r[0][0].B : ''); })
-      .catch(reset);
+    home();
   });
 
 })();

@@ -173,7 +173,7 @@ input[type="number"]:focus-visible {
    one thing to do; the lift is small on purpose - the page is a laboratory
    tool, not a sales page. */
 .go.cta {
-  margin-top: 2rem;
+  margin-top: 1.75rem;
   padding: 1.05rem;
   font-size: 1rem;
   font-weight: 500;
@@ -418,8 +418,12 @@ footer p { margin: 0 0 .5rem; }
    nowhere else - a consultation still reads one question in a narrow
    column, which is what the rest of this stylesheet is built around. */
 
-body.at-home .wrap { max-width: 44rem; padding-top: 3rem; }
-body.at-home .mast { margin-bottom: 2.25rem; }
+/* Tightened so the whole landing screen clears a short viewport - a 1080p
+   window at 150% zoom is about 600 CSS pixels tall, and a marker should not
+   have to scroll to find who the domain expert was. */
+body.at-home .wrap   { max-width: 44rem; padding: 2.25rem 1.5rem 2rem; }
+body.at-home .mast   { margin-bottom: 1.75rem; }
+body.at-home footer  { margin-top: 2.25rem; padding-top: 1.1rem; }
 
 /* The title names the system; the QUESTION is the focal point. Two headings
    at similar weight left the eye with nowhere to land, so the title is set
@@ -434,7 +438,7 @@ body.at-home .mast h1 {
 /* The question the whole system settles, and the hypothesis every
    certainty factor is belief about. */
 .hero {
-  margin: 0 0 1rem;
+  margin: 0 0 .25rem;
   max-width: 24ch;
   font-size: 2.1rem;
   font-weight: 500;
@@ -458,14 +462,10 @@ body.at-home .mast h1 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.75rem;
-  margin-top: 3.25rem;
-  padding-top: 1.5rem;
+  margin-top: 2.25rem;
+  padding-top: 1.4rem;
   border-top: 1px solid var(--line);
 }
-
-/* The scope statement runs the full width above the three credit columns. */
-.credits .span { grid-column: 1 / -1; }
-.credits .span .sub { display: block; max-width: 44ch; }
 
 .lbl {
   font-size: .72rem;
