@@ -225,7 +225,7 @@ the tests would be reasoning over different programs.
 
 ## How the knowledge is organised
 
-**77 rules and 223 facts**, in sixteen numbered sections across three files.
+**79 rules and 233 facts**, in sixteen numbered sections across three files.
 
 **Case facts** — what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
@@ -311,6 +311,36 @@ decimals, because a technical officer can answer "certain or likely" and nobody
 can honestly answer "0.7 rather than 0.8". The band is the knowledge; the
 number exists only so the interface can draw it.
 
+## The certainty factor
+
+The lecture defines a certainty factor as a number measuring the expert's
+belief, from +1.0 *definitely true* to -1.0 *definitely false*, and writes a
+rule as `IF <evidence> THEN <hypothesis> {cf}`.
+
+A signed number means nothing until the hypothesis is named, so this system
+names it once and uses it everywhere:
+
+```prolog
+hypothesis(fit_to_release, 'The laboratory result is fit to release').
+```
+
+Every certainty factor below is belief in that one proposition. `release` is
+`+1.0` *definitely*; `recollect_urgent` is `-1.0` *definitely not*. The nine
+verbal terms are the lecture's own table, including `unknown` as the only
+range on the scale, `-0.2` to `+0.2`.
+
+**The certainty factor does not choose the action.** `decision/3` proves that
+from the fault families and the rank order. The CF states how strongly the
+result is believed fit to leave the laboratory. Keeping them apart matters,
+because they are not the same ordering: `correct_entry` is **rank 2** - near
+the top, it is urgent - and yet it is the one action where the result itself
+is perfectly sound and somebody simply mistyped it. So it is urgent *and*
+`+0.6` *probably* fit to release. One ranking cannot say both.
+
+Separate is only safe if the two can never contradict each other on screen, so
+an invariant checks the sign of every certainty factor against whether its
+action lets the result out, in the table and in a live consultation.
+
 Only the decision is never graded. A fault is established or it is not, and the
 action follows from the family. Grading the recommendation would suggest the
 system weighs something it does not. The two faults graded `possible` are
@@ -372,13 +402,13 @@ does not, so the ceiling is marked as a working number and listed below.
 node test/cases.js
 ```
 
-**72 tests in three layers.**
+**73 tests in three layers.**
 
 **38 knowledge-base cases.** Facts in, expected action out. Each one also
 checks *which rule fired*, because a right answer from the wrong rule is a bug
 waiting to surface.
 
-**22 structural invariants.** These test properties of the knowledge base
+**23 structural invariants.** These test properties of the knowledge base
 rather than single cases:
 
 - `fault_family/2` is the only thing that assigns a family, and editing one
@@ -401,6 +431,9 @@ rather than single cases:
 - only a fault with a direction carries a certainty band, and every one of them
   does: an ungraded direction shows nothing, a graded non-direction is a number
   with nothing behind it
+- every action carries exactly one certainty factor, every one lands on the
+  lecture's nine-term scale, and its sign agrees with whether that action
+  actually lets the result out
 - the handling margin never contradicts the `delayed` fault: a specimen past
   the limit is compromised, not warned about a re-run it will not get
 
@@ -428,6 +461,8 @@ The suite exits non-zero if anything fails.
       not her words yet
 - [ ] Decide what, if anything, to advise for `lipaemic`. Lipaemia comes from
       the patient rather than the collection, so it has no advice here
+- [ ] Confirm the eight `release_cf/2` values. They are my reading of how
+      close each outcome is to a result going out; the belief should be hers
 - [ ] Confirm the five `explains_with/3` bands. They are my reading of what she
       has already said about each fault; the judgments should be hers
 - [ ] Confirm the priority order when two faults coexist

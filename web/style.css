@@ -370,5 +370,16 @@ footer p { margin: 0 0 .5rem; }
   .verdict h2 { font-size: 1.5rem; }
 }
 
+/* The certainty factor under the verdict. Quiet on purpose: it states a
+   belief about the hypothesis, it does not decide the action above it. */
+.standing {
+  margin: .9rem 0 0;
+  font-size: .82rem;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.standing b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
 .whybody .note { color: var(--faint); font-size: .84rem; }
 ul.check li.gap { border-left-color: #9a8f6b; background: #faf8f2; }

@@ -346,8 +346,16 @@
       { q: 'no_margin_for_rerun(s, T), no_margin_text(W).',             vars: ['T', 'W'] },
       { q: 'next_step(s, C, W), next_step_prefix(P).',                  vars: ['C', 'W', 'P'] },
       { q: 'explanation_certainty(s, T, C, B, CF), certainty_words(B, W).',
-        vars: ['T', 'C', 'B', 'CF', 'W'] }
+        vars: ['T', 'C', 'B', 'CF', 'W'] },
+      { q: 'release_standing(s, CF, Term, H).',                         vars: ['CF', 'Term', 'H'] }
     ]).then(render).catch(fail);
+  }
+
+  // A certainty factor reads better with its sign showing: +0.7, not 0.7.
+  function signed(v) {
+    var n = parseFloat(v);
+    if (isNaN(n)) return String(v);
+    return (n > 0 ? '+' : '') + n.toFixed(1);
   }
 
   function cap(s) {
@@ -374,6 +382,7 @@
     var nextStep = uniq(r[20], function (x) { return x.C; });
     // How strongly each fitting fault explains what was seen. Keyed by cause,
     // so the grading can be attached to the Consistent line it belongs to.
+    var standing = r[22][0] || null;
     var howSure = {};
     uniq(r[21], function (x) { return x.C; }).forEach(function (x) { howSure[x.C] = x; });
     var crit = uniq(r[4], function (x) { return x.T + x.D; });
@@ -395,6 +404,18 @@
               '<p class="count">The laboratory should</p>' +
               '<h2>' + esc(d ? d.L : 'No decision reached') + '</h2>' +
               '<p class="because">' + esc(d ? cap(d.W) : '') + '</p>' +
+              // Where this action sits on the release scale. A different
+              // question from the action itself: correct_entry is urgent and
+              // the result is still sound. See release_confidence/2.
+              // The certainty factor, and the hypothesis it is belief ABOUT.
+              // The lecture's form: IF <evidence> THEN <hypothesis> {cf}.
+              // Naming H is what makes the sign mean anything. The CF does
+              // not choose the action above it - decision/3 proves that.
+              (standing
+                ? '<p class="standing"><b>CF ' + esc(signed(standing.CF)) +
+                  ' &middot; ' + esc(standing.Term) + '</b><br>' +
+                  esc(standing.H) + '</p>'
+                : '') +
             '</div>';
 
     if (faults.length) {

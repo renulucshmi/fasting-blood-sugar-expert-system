@@ -1361,6 +1361,94 @@ const INVARIANTS = [
       return problems;
     }
   }
+
+  ,{
+    name: 'the certainty factor never contradicts the action it sits under',
+    // The CF states belief in one named hypothesis - "the laboratory result
+    // is fit to release" - and the action is proved separately by decision/3.
+    // Separate is right, but nothing stops two separate things disagreeing,
+    // and a page reading "Release the result" above a CF of -0.8 would be
+    // incoherent. This is what makes the separation safe rather than merely
+    // stated.
+    run: async () => {
+      const problems = [];
+      const s = await load('');
+
+      if (!(await query(s, "hypothesis(fit_to_release, _).")).length) {
+        problems.push('the hypothesis the CF is belief about is not named');
+      }
+
+      // Every action carries exactly one CF, and every CF has a reading on
+      // the lecture's nine-term scale.
+      const actions = await query(s, 'action_rank(A, _).', ['A']);
+      const releases = new Set(['release', 'release_comment']);
+      for (const { A } of actions) {
+        const cf = await query(s, `release_cf(${A}, CF).`, ['CF']);
+        if (cf.length !== 1) {
+          problems.push(`${A} has ${cf.length} certainty factors, expected 1`);
+          continue;
+        }
+        const v = parseFloat(cf[0].CF);
+        if (!(v >= -1 && v <= 1)) {
+          problems.push(`${A} has CF ${v}, outside -1 to +1`);
+        }
+        const term = await query(s, `cf_reading(${v}, T).`, ['T']);
+        if (term.length !== 1) {
+          problems.push(`CF ${v} for ${A} reads as ${term.length} terms, ` +
+                        `expected exactly 1`);
+        }
+        // The sign has to agree with whether this action lets the result out.
+        if (releases.has(A) && v <= 0) {
+          problems.push(`${A} puts the result out and carries CF ${v}`);
+        }
+        if (!releases.has(A) && A !== 'correct_entry' && v >= 0) {
+          problems.push(`${A} does not put the result out and carries CF ${v}`);
+        }
+      }
+
+      // correct_entry is the one that proves the two scales differ: rank 2,
+      // urgent, and the result itself is sound. It must be positive.
+      const ce = await query(s, 'release_cf(correct_entry, CF).', ['CF']);
+      if (ce.length && parseFloat(ce[0].CF) <= 0) {
+        problems.push('correct_entry is the case where the result is sound ' +
+                      'and only the typing is wrong, so its CF must be positive');
+      }
+
+      // And it has to hold in a real consultation, not just in the table.
+      for (const [facts, action, positive] of [
+        ['value(s,fbs,94). tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,10).',
+         'release', true],
+        ['value(s,fbs,310). tube(s,fbs,fluoride). delay_hours(s,0). ' +
+         'fasting_hours(s,10). label_mismatch(s).', 'recollect_urgent', false]
+      ]) {
+        const run = await load(facts);
+        await query(run, 'forward_chain.');
+        const st = await query(run, 'release_standing(s, CF, T, H).',
+                               ['CF', 'T', 'H']);
+        if (st.length !== 1) {
+          problems.push(`${action}: release_standing gave ${st.length} answers`);
+          continue;
+        }
+        const v = parseFloat(st[0].CF);
+        if (positive && v <= 0) problems.push(`${action} reported CF ${v}`);
+        if (!positive && v >= 0) problems.push(`${action} reported CF ${v}`);
+        if (!st[0].T) problems.push(`${action} reported no verbal term`);
+      }
+
+      // The lecture's scale, checked against the lecture: nine terms, and
+      // Unknown is the only one that is a range.
+      const terms = await query(s, 'cf_term(Lo, Hi, T).', ['Lo', 'Hi', 'T']);
+      if (terms.length !== 9) {
+        problems.push(`cf_term/3 has ${terms.length} terms, the lecture tabulates 9`);
+      }
+      const ranges = terms.filter(x => parseFloat(x.Lo) !== parseFloat(x.Hi));
+      if (ranges.length !== 1 || ranges[0].T !== 'unknown') {
+        problems.push('the lecture makes Unknown the only range on the scale; ' +
+                      `here ${ranges.length} term(s) are ranges`);
+      }
+      return problems;
+    }
+  }
 ];
 
 // ------------------------------------------------- integration: consultations

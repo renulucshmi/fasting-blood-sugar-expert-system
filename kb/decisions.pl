@@ -85,6 +85,22 @@ decision(S, Action, Why) :-
          R2 < R ).
 
 
+% The lecture's verbal reading of a certainty factor. Unknown is a range and
+% the other eight are points, so one rule covers both.
+cf_reading(CF, Term) :-
+    cf_term(Low, High, Term),
+    CF >= Low,
+    CF =< High.
+
+% Belief that this result is fit to release, with the hypothesis it is belief
+% ABOUT. Stated rather than implied: a signed number is meaningless until the
+% proposition is named.
+release_standing(S, CF, Term, H) :-
+    decision(S, Action, _),
+    release_cf(Action, CF),
+    cf_reading(CF, Term),
+    hypothesis(fit_to_release, H).
+
 % also_fix/2 - a machine fault alongside a recollection still has to be fixed.
 % Hands back the fault itself. The interface says what to do with it.
 also_fix(S, Cause) :-

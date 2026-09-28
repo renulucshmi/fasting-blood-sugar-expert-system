@@ -259,6 +259,56 @@ explains_with(drip_arm,    fbs, possible).  % depends what is running  [gap]
 explains_with(carryover,   fbs, possible).  % depends on the sample before  [gap]
 
 % ----------------------------------------------------------------------------
+%  CERTAINTY FACTOR ON THE RELEASE HYPOTHESIS
+%
+%  The lecture (D6) defines a certainty factor as "a number to measure the
+%  expert's belief", running from +1.0 (definitely true) to -1.0 (definitely
+%  false), and writes a rule as
+%
+%      IF <evidence> THEN <hypothesis> {cf}
+%
+%  where cf is belief in hypothesis H given that evidence E has occurred.
+%
+%  A signed number means nothing until H is named, so H is named here and
+%  nowhere else. Everything below is belief in THIS proposition:
+hypothesis(fit_to_release, 'The laboratory result is fit to release').
+
+%  The nine terms, exactly as the lecture tabulates them. Note that Unknown
+%  is a RANGE and the rest are points - that is the lecture's own shape, not
+%  a simplification of it.
+cf_term(-1.0, -1.0, 'definitely not').
+cf_term(-0.8, -0.8, 'almost certainly not').
+cf_term(-0.6, -0.6, 'probably not').
+cf_term(-0.4, -0.4, 'maybe not').
+cf_term(-0.2,  0.2, 'unknown').
+cf_term( 0.4,  0.4, 'maybe').
+cf_term( 0.6,  0.6, 'probably').
+cf_term( 0.8,  0.8, 'almost certainly').
+cf_term( 1.0,  1.0, 'definitely').
+
+%  Belief in fit_to_release once each action has been proved. Read them as
+%  the lecture's rule form: IF <the evidence that proved this action> THEN
+%  fit_to_release {cf}.
+%
+%  This is NOT the same ordering as action_rank/2, and the difference is the
+%  reason both exist. correct_entry is rank 2 - near the top, it is urgent -
+%  and yet it is the one action where the result itself is perfectly sound;
+%  somebody mistyped it. So it is urgent AND probably fit to release. One
+%  ranking cannot say both.
+%
+%  The CF does not choose the action. The action is proved by decision/3 and
+%  the CF states how strongly the result is believed fit to go out. A test
+%  enforces that the two never contradict each other.
+release_cf(release,            1.0).   % definitely
+release_cf(release_comment,    0.8).   % almost certainly
+release_cf(correct_entry,      0.6).   % probably - the number is sound, the typing is not
+release_cf(rerun_same_sample, -0.4).   % maybe not - the blood is fine, the run is not
+release_cf(escalate,          -0.6).   % probably not - the number cannot be right
+release_cf(recollect,         -0.8).   % almost certainly not
+release_cf(recollect_teach,   -0.8).   % almost certainly not
+release_cf(recollect_urgent,  -1.0).   % definitely not
+
+% ----------------------------------------------------------------------------
 
 % What has to be put right before the analyser is trusted again.
 %
