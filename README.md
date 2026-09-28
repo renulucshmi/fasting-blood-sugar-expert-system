@@ -9,9 +9,19 @@ Prakasan R. — 224152U, University of Moratuwa
 ---
 
 > **University coursework. Not for clinical use.**
-> Every threshold and every fault rule in `kb/` is a draft, taken from
-> textbooks, papers and cited sources. None of it has been confirmed by the
-> domain expert yet.
+> This system decides whether a laboratory result is fit to be released. It
+> does not interpret results and it does not diagnose anybody.
+
+**Domain expert.** Shangavie Subramaniyam, BSc in Biomedical Science, Technical
+Officer in a clinical laboratory. The fault causes the system reasons over came
+from her, and she fact-checked the reference ranges and the interference facts
+before they went into `kb/`. The fault-family idea the whole system turns on is
+hers: she was the one who said a wrong result can come from the analyser, an
+expired reagent lot or calibration drift, and not only from the specimen.
+
+What she has **not** yet confirmed is listed under **Still to do** at the end of
+this file. Every fact tagged `[local policy]`, `[gap]` or `[check R1]` in
+`kb/facts.pl` is on that list, and so is everything added in the last week.
 
 ---
 
@@ -389,8 +399,9 @@ The suite exits non-zero if anything fails.
 
 ## Still to do
 
-- [ ] Get the fault-to-family table corrected by the expert — that table is the
-      system, and everything downstream reads it
+- [ ] Re-check the fault-to-family table with her now that six more causes have
+      been added since she last saw it — that table is the system, and
+      everything downstream reads it
 - [ ] Fill `method_effect/5`: nothing is recorded yet for what in-vitro
       haemolysis does to an HbA1c on any method, and the system says so
 - [ ] Confirm the upper fasting limit in `max_fasting_hours/1`. The guideline
