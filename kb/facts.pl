@@ -224,6 +224,42 @@ instruction(haemolysed,
 instruction(clotted,
     'mix the tube gently and straight after drawing the fresh sample').
 
+% ----------------------------------------------------------------------------
+%  CERTAINTY
+%
+%  Only one thing in this system is graded, and it is deliberately not the
+%  decision. A fault is established or it is not; the action follows from the
+%  family. What varies is how strongly an established fault EXPLAINS the
+%  abnormal number it is being offered as the cause of.
+%
+%  Three named bands, not free decimals. A technical officer can answer
+%  "certain, likely or possible"; nobody can honestly answer "0.7 rather than
+%  0.8". The band is the knowledge and the number exists only so the interface
+%  can draw it. Writing 0.73 here would be inventing precision, which is the
+%  one thing this knowledge base does not do.
+%
+%  The band is NOT a probability that the patient's result is wrong. It is the
+%  expert's strength of judgment that this fault accounts for this direction.
+certainty_band(certain,  0.9).
+certainty_band(likely,   0.6).
+certainty_band(possible, 0.3).
+
+%  explains_with(Cause, Test, Band) - only for a fault with a direction.
+%  A fault whose direction is unclear explains nothing, so it is graded
+%  nowhere, and a test enforces that both ways.
+%
+%  The two `possible` rows are the two assumptions declared in section 3: the
+%  drip direction holds only if the infusion carries glucose, and carryover
+%  only if the preceding sample was very high. The grading and the comments
+%  say the same thing, which is the point.
+explains_with(delayed,     fbs, certain).   % glycolysis in the tube
+explains_with(wrong_tube,  fbs, certain).   % the same mechanism, unchecked
+explains_with(not_fasting, fbs, likely).    % eating raises it, by how much varies
+explains_with(drip_arm,    fbs, possible).  % depends what is running  [gap]
+explains_with(carryover,   fbs, possible).  % depends on the sample before  [gap]
+
+% ----------------------------------------------------------------------------
+
 % What has to be put right before the analyser is trusted again.
 %
 % A machine fault leaves the blood in the tube innocent, so the action is a
@@ -374,6 +410,11 @@ also_fix_prefix('Fix this before running the new sample:').
 
 % And what it prefixes a fix_before_rerun/3 instruction with.
 fix_first_prefix('Put this right before the re-run:').
+
+% How each band is read aloud on the result.
+certainty_words(certain,  'this is the usual cause of a result moving this way').
+certainty_words(likely,   'this commonly moves a result this way, though by how much varies').
+certainty_words(possible, 'this can move a result this way, but not always').
 
 % And what it prefixes a next_step/3 instruction with. Deliberately neutral:
 % instruction/2 holds advice for whoever acts on it next, and that is not

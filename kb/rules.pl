@@ -251,6 +251,14 @@ accounts_for(S, Test, Cause, Why) :-
     fault_effect(Cause, Test, Seen, _),
     consistency_reason(fits, Seen, Why).
 
+% How strongly the fault that fits actually explains what was seen. Reported
+% beside accounts_for/4 rather than folded into it, so the consistency verdict
+% keeps its own arity and nothing downstream has to change to ignore this.
+explanation_certainty(S, Test, Cause, Band, CF) :-
+    accounts_for(S, Test, Cause, _),
+    explains_with(Cause, Test, Band),
+    certainty_band(Band, CF).
+
 % The fault pushes the OPPOSITE way to how the result actually went. Whatever
 % else is true, this fault is not the explanation for this abnormality.
 does_not_account_for(S, Test, Cause, Why) :-

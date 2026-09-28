@@ -344,7 +344,9 @@
       { q: 'method_not_recorded(s, W).',                                vars: ['W'] },
       { q: 'fix_before_rerun(s, C, W), fix_first_prefix(P).',           vars: ['C', 'W', 'P'] },
       { q: 'no_margin_for_rerun(s, T), no_margin_text(W).',             vars: ['T', 'W'] },
-      { q: 'next_step(s, C, W), next_step_prefix(P).',                  vars: ['C', 'W', 'P'] }
+      { q: 'next_step(s, C, W), next_step_prefix(P).',                  vars: ['C', 'W', 'P'] },
+      { q: 'explanation_certainty(s, T, C, B, CF), certainty_words(B, W).',
+        vars: ['T', 'C', 'B', 'CF', 'W'] }
     ]).then(render).catch(fail);
   }
 
@@ -370,6 +372,10 @@
     var fixFirst = uniq(r[18], function (x) { return x.C; });
     var noMargin = uniq(r[19], function (x) { return x.W; });
     var nextStep = uniq(r[20], function (x) { return x.C; });
+    // How strongly each fitting fault explains what was seen. Keyed by cause,
+    // so the grading can be attached to the Consistent line it belongs to.
+    var howSure = {};
+    uniq(r[21], function (x) { return x.C; }).forEach(function (x) { howSure[x.C] = x; });
     var crit = uniq(r[4], function (x) { return x.T + x.D; });
     var fits = uniq(r[5], function (x) { return x.C; });
     var clash = uniq(r[6], function (x) { return x.C; });
@@ -498,7 +504,13 @@
     // The reason is a fact in kb/ and does not name the fault, so the two
     // are put together here. Joining strings for display is formatting.
     var say = function (x) { return cap(x.CL) + '. ' + cap(x.W); };
-    fits.forEach(function (x)   { lines.push(['fits', 'Consistent', say(x)]); });
+    fits.forEach(function (x) {
+      var g = howSure[x.C], text = say(x);
+      // Only a fault with a direction is graded, so a missing entry is not a
+      // gap here - it means the fault explains nothing and was never graded.
+      if (g) text += '. ' + cap(g.B) + ' - ' + g.W;
+      lines.push(['fits', 'Consistent', text]);
+    });
     clash.forEach(function (x)  { lines.push(['clash', 'Does not fit', say(x)]); });
     unsure.forEach(function (x) { lines.push(['unsure', 'Cannot say', say(x)]); });
     uniq(r[14], function (x) { return x.C; })

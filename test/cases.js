@@ -1300,6 +1300,67 @@ const INVARIANTS = [
       return problems;
     }
   }
+
+  ,{
+    name: 'only a fault with a direction is graded, and every one of them is',
+    // The certainty layer grades how strongly a fault EXPLAINS a result, not
+    // how sure the decision is. A fault whose direction is unclear explains
+    // nothing, so grading it would be a number with no meaning behind it. A
+    // fault that does push a direction and carries no grade is the opposite
+    // mistake: the interface would silently show nothing.
+    run: async () => {
+      const problems = [];
+      const s = await load('');
+
+      const bands = await query(s, 'certainty_band(B, CF).', ['B', 'CF']);
+      if (bands.length < 2) problems.push('fewer than two certainty bands exist');
+      for (const { B, CF } of bands) {
+        const n = parseFloat(CF);
+        if (!(n > 0 && n <= 1)) problems.push(`band ${B} has CF ${CF}, outside 0 to 1`);
+        if (!(await query(s, `certainty_words(${B}, _).`)).length) {
+          problems.push(`band ${B} has no wording, so it cannot be read aloud`);
+        }
+      }
+
+      for (const { C, T, D } of await query(s, 'fault_effect(C, T, D, _).',
+                                            ['C', 'T', 'D'])) {
+        const graded = await query(s, `explains_with(${C}, ${T}, B).`, ['B']);
+        if (D === 'unclear') {
+          if (graded.length) {
+            problems.push(`${C} on ${T} has no direction and is still graded ` +
+                          `${graded[0].B}: a number with nothing behind it`);
+          }
+        } else if (!graded.length) {
+          problems.push(`${C} pushes ${T} ${D} and carries no grade, so the ` +
+                        `result would show the fit and say nothing about it`);
+        } else if (!bands.some(b => b.B === graded[0].B)) {
+          problems.push(`${C} on ${T} is graded ${graded[0].B}, which is not a band`);
+        }
+      }
+
+      // And it has to reach a real consultation, not just sit in the table.
+      const run = await load('value(s,fbs,61). tube(s,fbs,fluoride). ' +
+                             'fasting_hours(s,10). delay_hours(s,4).');
+      await query(run, 'forward_chain.');
+      const got = await query(run,
+        'explanation_certainty(s, fbs, delayed, B, CF).', ['B', 'CF']);
+      if (!got.length) {
+        problems.push('a delayed tube with a low glucose reports no certainty');
+      } else if (got[0].B !== 'certain') {
+        problems.push(`a delayed tube grades ${got[0].B}, expected certain`);
+      }
+
+      // A fault that does not fit must not be graded either: the grading is
+      // attached to the explanation, and there is no explanation to grade.
+      const high = await load('value(s,fbs,350). tube(s,fbs,fluoride). ' +
+                              'fasting_hours(s,10). delay_hours(s,4).');
+      await query(high, 'forward_chain.');
+      if ((await query(high, 'explanation_certainty(s, fbs, delayed, _, _).')).length) {
+        problems.push('a delay that cannot explain a HIGH result was still graded');
+      }
+      return problems;
+    }
+  }
 ];
 
 // ------------------------------------------------- integration: consultations

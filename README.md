@@ -225,7 +225,7 @@ the tests would be reasoning over different programs.
 
 ## How the knowledge is organised
 
-**76 rules and 217 facts**, in sixteen numbered sections across three files.
+**77 rules and 223 facts**, in sixteen numbered sections across three files.
 
 **Case facts** — what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
@@ -305,8 +305,21 @@ There are four outcomes, not two:
 | **Cannot say** | The fault affects this test in an unpredictable direction |
 | **Not recorded** | Nothing records what this fault does to this test — a gap, not a finding |
 
-That last row matters. Silence in `fault_effect/4` is a gap in the knowledge
-base, not evidence of no effect, and treating it as evidence produced false
+A fault that **fits** is also graded: how strongly does it explain a result
+moving that way? Three named bands - `certain`, `likely`, `possible` - not free
+decimals, because a technical officer can answer "certain or likely" and nobody
+can honestly answer "0.7 rather than 0.8". The band is the knowledge; the
+number exists only so the interface can draw it.
+
+Only the decision is never graded. A fault is established or it is not, and the
+action follows from the family. Grading the recommendation would suggest the
+system weighs something it does not. The two faults graded `possible` are
+exactly the two assumptions declared in section 3 of `kb/facts.pl`: the drip
+direction holds only if the infusion carries glucose, and carryover only if the
+sample before it was very high.
+
+That "not recorded" row matters. Silence in `fault_effect/4` is a gap in the
+knowledge base, not evidence of no effect, and treating it as evidence produced false
 reassurance about specimens that were being thrown away.
 
 **A machine fault that loses is not forgotten.** If the specimen has to be
@@ -359,13 +372,13 @@ does not, so the ceiling is marked as a working number and listed below.
 node test/cases.js
 ```
 
-**71 tests in three layers.**
+**72 tests in three layers.**
 
 **38 knowledge-base cases.** Facts in, expected action out. Each one also
 checks *which rule fired*, because a right answer from the wrong rule is a bug
 waiting to surface.
 
-**21 structural invariants.** These test properties of the knowledge base
+**22 structural invariants.** These test properties of the knowledge base
 rather than single cases:
 
 - `fault_family/2` is the only thing that assigns a family, and editing one
@@ -385,6 +398,9 @@ rather than single cases:
   and the interface actually asks for it
 - the fasting question is read at both ends, and both ends give advice
 - every fault a fresh sample can fix says how to avoid it next time
+- only a fault with a direction carries a certainty band, and every one of them
+  does: an ungraded direction shows nothing, a graded non-direction is a number
+  with nothing behind it
 - the handling margin never contradicts the `delayed` fault: a specimen past
   the limit is compromised, not warned about a re-run it will not get
 
@@ -412,6 +428,8 @@ The suite exits non-zero if anything fails.
       not her words yet
 - [ ] Decide what, if anything, to advise for `lipaemic`. Lipaemia comes from
       the patient rather than the collection, so it has no advice here
+- [ ] Confirm the five `explains_with/3` bands. They are my reading of what she
+      has already said about each fault; the judgments should be hers
 - [ ] Confirm the priority order when two faults coexist
 - [ ] Confirm the plausibility, critical and delta limits against the lab's own
 - [ ] Add the faults the expert names that are not here yet
