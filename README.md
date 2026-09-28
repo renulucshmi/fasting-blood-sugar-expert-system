@@ -104,7 +104,7 @@ A web browser. Nothing else. Chrome, Edge, Firefox and Safari have all been
 used during development.
 
 To run the test suite you also need **Node.js** (any version from 16 onward).
-To rebuild `index.html` after editing the knowledge base you need **Python 3**,
+To rebuild `web/index.html` after editing the knowledge base you need **Python 3**,
 or you can use `build.bat`.
 
 ## Installation and setup
@@ -113,7 +113,7 @@ None. Copy the folder anywhere and open it.
 
 ## Required dependencies
 
-None to install. Tau Prolog 0.3.4 is vendored in `lib/` so the system runs with
+None to install. Tau Prolog 0.3.4 is vendored in `web/vendor/` so the system runs with
 no internet connection at all. Disconnect your network and it still works —
 nothing is sent anywhere, no server, no storage.
 
@@ -179,7 +179,7 @@ need to touch to change what the system knows.
 Using `run.bat`: save the file and refresh the page. That is all.
 
 Opening `web/index.html` directly: the browser refuses to read the `.pl` files
-off the disk for security reasons, so `index.html` carries a copy of them
+off the disk for security reasons, so `web/index.html` carries a copy of them
 inside a `<script type="text/prolog">` block. After editing anything in `kb/`,
 double-click `build.bat` to refresh that copy.
 

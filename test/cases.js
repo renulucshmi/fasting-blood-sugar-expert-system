@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------------------
-   verify_cases.js  -  the test suite
+   test/cases.js  -  the test suite
 
-   Runs every case straight through kb.pl and checks three things:
+   Runs every case straight through kb/ and checks three things:
 
      1. the ACTION the system reached, against the expected action
      2. the RULE that produced it, against the expected rule
@@ -10,7 +10,7 @@
    Point 2 is the one that matters. A system can reach the right answer by the
    wrong rule, and that is a bug waiting to surface on the next case.
 
-   Run it with:   node verify_cases.js
+   Run it with:   node test/cases.js
    Exit code 0 if every case passes, 1 if any fails.
 
    Prakasan R.  -  224152U
@@ -528,14 +528,14 @@ const INVARIANTS = [
       const problems = [];
       const README = fs.readFileSync(ROOT + '/README.md', 'utf8');
 
-      // 1. Every Prolog line the README quotes must exist in kb.pl.
+      // 1. Every Prolog line the README quotes must exist in kb/.
       const SKIP = /^(%|value\(|tube\(|delay_hours|qc_status|fault_family\()/;
       for (const m of README.matchAll(/```prolog\n([\s\S]*?)```/g)) {
         for (const raw of m[1].split('\n')) {
           const line = raw.trim();
           if (!line || SKIP.test(line)) continue;
           if (!KB.includes(line.replace(/\s+%.*$/, '').trim())) {
-            problems.push(`README quotes a rule that is not in kb.pl: ${line}`);
+            problems.push(`README quotes a rule that is not in kb/: ${line}`);
           }
         }
       }
@@ -545,7 +545,7 @@ const INVARIANTS = [
                           'specimen_compromised', 'decision', 'settled',
                           'also_fix', 'boundary', 'method_effect']) {
         if (!new RegExp('\\b' + name + '\\b').test(KB)) {
-          problems.push(`README names ${name}, which no longer exists in kb.pl`);
+          problems.push(`README names ${name}, which no longer exists in kb/`);
         }
       }
 
@@ -631,8 +631,8 @@ const INVARIANTS = [
   }
   ,{
     name: 'no predicate in the knowledge base is unreachable',
-    // Structural guard against dead knowledge. Every predicate kb.pl defines
-    // must either be called by another rule in kb.pl, or queried by app.js or
+    // Structural guard against dead knowledge. Every predicate kb/ defines
+    // must either be called by another rule in kb/, or queried by web/app.js or
     // by this file. Anything else is a rule that looks like knowledge and
     // does nothing - which overstates what the system knows.
     run: () => {
@@ -673,7 +673,7 @@ const INVARIANTS = [
         const calledInKb = bodyGoals.has(name);
         const queried = new RegExp('\\b' + name + '\\s*[(.]').test(js);
         if (!calledInKb && !queried) {
-          problems.push(`${name} is defined in kb.pl but nothing calls or queries it`);
+          problems.push(`${name} is defined in kb/ but nothing calls or queries it`);
         }
       }
       return problems;
@@ -929,7 +929,7 @@ const INVARIANTS = [
 //
 // A question whose answer was thrown away passed the entire unit suite,
 // because the unit suite never answers a question. These drive the real
-// thing - the real kb.pl, the real question order, and the real ASSERTS table
+// thing - the real kb/, the real question order, and the real ASSERTS table
 // lifted out of app.js - with no browser and no dependencies.
 
 // Lift the answer-to-fact table out of app.js rather than restating it here.

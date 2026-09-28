@@ -3,9 +3,9 @@
 
    This file makes no decisions. It collects the case, hands it to Tau Prolog,
    and shows what comes back. Every verdict, every question and every reason on
-   the screen was produced by a rule in kb.pl.
+   the screen was produced by a rule in kb/.
 
-   The consultation asks one question at a time, in the order kb.pl gives, and
+   The consultation asks one question at a time, in the order kb/ gives, and
    stops as soon as settled/2 proves that nothing still unasked could change
    the action.
 
@@ -105,7 +105,7 @@
   // ------------------------------------------------------- facts for this case
 
   // How each answer becomes a Prolog fact. The question text, the options and
-  // the ordering all live in kb.pl; only this translation lives here.
+  // the ordering all live in kb/; only this translation lives here.
   var ASSERTS = {
     label:   function (v) { return v === 'no'  ? 'label_mismatch(s).' : ''; },
     typed:   function (v) { return v === 'yes' ? 'transcription_doubt(s).' : ''; },
@@ -456,7 +456,7 @@
 
     h += '<h3>Reasoning</h3>';
     var lines = [];
-    // The reason is a fact in kb.pl and does not name the fault, so the two
+    // The reason is a fact in kb/ and does not name the fault, so the two
     // are put together here. Joining strings for display is formatting.
     var say = function (x) { return cap(x.CL) + '. ' + cap(x.W); };
     fits.forEach(function (x)   { lines.push(['fits', 'Consistent', say(x)]); });

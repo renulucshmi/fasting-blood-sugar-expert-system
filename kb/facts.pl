@@ -13,7 +13,7 @@
 %% ===========================================================================
 
 % ============================================================================
-%  kb.pl  -  Glucose Result Release Advisor : knowledge base
+%  kb/facts.pl  -  Glucose Result Release Advisor : knowledge base
 %
 %  CM 3321 Logic Programming and Artificial Cognitive Systems
 %  Prakasan R.  -  224152U

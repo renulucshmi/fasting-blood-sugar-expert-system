@@ -38,7 +38,10 @@ with io.open(TEMPLATE, encoding="utf-8") as f:
 
 html = html.replace("__KB__", kb.rstrip())
 
-with io.open(OUT, "w", encoding="utf-8") as f:
+# newline="\n" keeps the output identical on every platform. Without it
+# Python rewrites every line ending on Windows, so a rebuild that changed
+# nothing would still show up as a change to the whole file.
+with io.open(OUT, "w", encoding="utf-8", newline="\n") as f:
     f.write(html)
 
 print("web/index.html rebuilt from %s (%d lines)"
