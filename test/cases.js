@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------------------
-   test/cases.js  -  the test suite
+   verify_cases.js  -  the test suite
 
-   Runs every case straight through kb/ and checks three things:
+   Runs every case straight through kb.pl and checks three things:
 
      1. the ACTION the system reached, against the expected action
      2. the RULE that produced it, against the expected rule
@@ -10,7 +10,7 @@
    Point 2 is the one that matters. A system can reach the right answer by the
    wrong rule, and that is a bug waiting to surface on the next case.
 
-   Run it with:   node test/cases.js
+   Run it with:   node verify_cases.js
    Exit code 0 if every case passes, 1 if any fails.
 
    Prakasan R.  -  224152U
@@ -190,6 +190,34 @@ const CASES = [
     action: 'release',
     rule:   'plausible',
     faults: [] },
+
+  { name: 'An impossible number is never also called probably real',
+    // Regression guard. unaccounted/3 fired on any abnormal value with no
+    // fault found, including values implausible/3 had already rejected. The
+    // system said "doubt the number first" and "treat the low value as the
+    // patient's own" about the same result.
+    facts: `value(s,fbs,12). ${CLEAN}`,
+    action: 'escalate',
+    rule:   'implausible',
+    faults: [],
+    consistency: 'none' },
+
+  { name: 'An HbA1c below the assay floor is not called probably real',
+    facts: 'value(s,hba1c,1.5). tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).',
+    action: 'escalate',
+    rule:   'implausible',
+    faults: [],
+    consistency: 'none' },
+
+  { name: 'A CRITICAL value is still the patient\'s own',
+    // The other side of the boundary. 48 is urgent but believable, so the
+    // fix must not silence "probably real" here too.
+    facts: `value(s,fbs,48). ${CLEAN}`,
+    action: 'release',
+    rule:   'plausible',
+    faults: [],
+    critical: 'low',
+    consistency: 'unaccounted' },
 
   { name: 'No fault, but an impossible number',
     facts: `value(s,fbs,12). ${CLEAN}`,
@@ -528,14 +556,14 @@ const INVARIANTS = [
       const problems = [];
       const README = fs.readFileSync(ROOT + '/README.md', 'utf8');
 
-      // 1. Every Prolog line the README quotes must exist in kb/.
+      // 1. Every Prolog line the README quotes must exist in kb.pl.
       const SKIP = /^(%|value\(|tube\(|delay_hours|qc_status|fault_family\()/;
       for (const m of README.matchAll(/```prolog\n([\s\S]*?)```/g)) {
         for (const raw of m[1].split('\n')) {
           const line = raw.trim();
           if (!line || SKIP.test(line)) continue;
           if (!KB.includes(line.replace(/\s+%.*$/, '').trim())) {
-            problems.push(`README quotes a rule that is not in kb/: ${line}`);
+            problems.push(`README quotes a rule that is not in kb.pl: ${line}`);
           }
         }
       }
@@ -545,7 +573,7 @@ const INVARIANTS = [
                           'specimen_compromised', 'decision', 'settled',
                           'also_fix', 'boundary', 'method_effect']) {
         if (!new RegExp('\\b' + name + '\\b').test(KB)) {
-          problems.push(`README names ${name}, which no longer exists in kb/`);
+          problems.push(`README names ${name}, which no longer exists in kb.pl`);
         }
       }
 
@@ -631,8 +659,8 @@ const INVARIANTS = [
   }
   ,{
     name: 'no predicate in the knowledge base is unreachable',
-    // Structural guard against dead knowledge. Every predicate kb/ defines
-    // must either be called by another rule in kb/, or queried by web/app.js or
+    // Structural guard against dead knowledge. Every predicate kb.pl defines
+    // must either be called by another rule in kb.pl, or queried by app.js or
     // by this file. Anything else is a rule that looks like knowledge and
     // does nothing - which overstates what the system knows.
     run: () => {
@@ -673,7 +701,7 @@ const INVARIANTS = [
         const calledInKb = bodyGoals.has(name);
         const queried = new RegExp('\\b' + name + '\\s*[(.]').test(js);
         if (!calledInKb && !queried) {
-          problems.push(`${name} is defined in kb/ but nothing calls or queries it`);
+          problems.push(`${name} is defined in kb.pl but nothing calls or queries it`);
         }
       }
       return problems;
@@ -771,6 +799,57 @@ const INVARIANTS = [
         }
       }
       if (checked < 6) problems.push(`only ${checked} limits were exercised, expected at least 6`);
+      return problems;
+    }
+  }
+  ,{
+    name: 'the system never doubts a number and trusts it at once',
+    // Structural guard. implausible/3 and unaccounted/3 make opposite
+    // claims about the same value, so they must never both hold.
+    run: async () => {
+      const problems = [];
+      const base = {
+        fbs:   'tube(s,fbs,fluoride). delay_hours(s,0). fasting_hours(s,10).',
+        hba1c: 'tube(s,hba1c,edta). delay_hours(s,0). fasting_hours(s,10).'
+      };
+      // Build a value just past every limit that makes a number implausible.
+      const probe = await load('');
+      const spec = [['survivable_low', v => v - 1], ['survivable_high', v => v + 1],
+                    ['impossible_low', v => v - 0.1], ['impossible_high', v => v + 0.1]];
+      let checked = 0;
+      for (const [pred, trip] of spec) {
+        for (const { T, V } of await query(probe, `${pred}(T, V).`, ['T', 'V'])) {
+          if (!base[T]) continue;
+          const v = trip(parseFloat(V));
+          const s = await load(`value(s,${T},${v}). ${base[T]}`);
+          await query(s, 'forward_chain.');
+          const imp  = await query(s, 'implausible(s, _, _).');
+          const real = await query(s, 'unaccounted(s, _, _).');
+          checked++;
+          if (!imp.length) {
+            problems.push(`${pred}(${T}, ${V}): a value of ${v} was not called implausible`);
+          } else if (real.length) {
+            problems.push(`${pred}(${T}, ${V}): a value of ${v} is implausible AND ` +
+                          `"probably real" - the system contradicts itself`);
+          }
+        }
+      }
+      if (checked < 4) problems.push(`only ${checked} implausible limits exercised`);
+
+      // And a critical but believable value must keep saying "probably real",
+      // or the guard has been drawn too wide.
+      for (const { T, V } of await query(probe, 'critical_low(T, V).', ['T', 'V'])) {
+        if (!base[T]) continue;
+        const s = await load(`value(s,${T},${V}). ${base[T]}`);
+        await query(s, 'forward_chain.');
+        const crit = await query(s, 'critical(s, _, _).');
+        const real = await query(s, 'unaccounted(s, _, _).');
+        if (!crit.length) problems.push(`critical_low(${T}, ${V}) did not flag as critical`);
+        if (!real.length) {
+          problems.push(`a critical but believable ${T} of ${V} lost "probably real": ` +
+                        `the implausible guard is too wide`);
+        }
+      }
       return problems;
     }
   }
@@ -929,7 +1008,7 @@ const INVARIANTS = [
 //
 // A question whose answer was thrown away passed the entire unit suite,
 // because the unit suite never answers a question. These drive the real
-// thing - the real kb/, the real question order, and the real ASSERTS table
+// thing - the real kb.pl, the real question order, and the real ASSERTS table
 // lifted out of app.js - with no browser and no dependencies.
 
 // Lift the answer-to-fact table out of app.js rather than restating it here.

@@ -264,8 +264,15 @@ unrecorded_effect(S, Test, Cause, Why) :-
 % Abnormal, nothing found pushes it that way, nothing found is unpredictable,
 % and nothing found has an unrecorded effect. Only then does the abnormality
 % belong to the patient until something proves otherwise.
+%
+% And not when the number is implausible. A value the system has already
+% rejected as one no patient produces cannot also be "the patient's own" -
+% saying both is the system contradicting itself in the same breath. A
+% CRITICAL value is different: it is believable, just urgent, so that one
+% still belongs to the patient.
 unaccounted(S, Test, Why) :-
     abnormal(S, Test, Seen),
+    \+ implausible(S, Test, _),
     \+ accounts_for(S, Test, _, _),
     \+ direction_unknown(S, Test, _, _),
     \+ effect_unrecorded(S, Test, _),
