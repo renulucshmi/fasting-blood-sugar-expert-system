@@ -1,0 +1,110 @@
+# Publishes the advisor to GitHub Pages.
+#
+# The site keeps the repository layout, because web/app.js fetches
+# ../kb/*.pl and that only resolves if kb/ and web/ stay siblings. The
+# published tree is therefore:
+#
+#   /                 a redirect into web/, generated here, not in the repo
+#   /kb/*.pl          fetched live by the page
+#   /web/index.html   the page itself
+#
+# Nothing is committed back to the repository by this workflow.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Lets you redeploy from the Actions tab without pushing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Queued runs wait rather than cancel, so a
+# deploy that is already publishing is never left half done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The page carries a mirror of the knowledge base for the case where it
+      # is opened straight from disk. Rebuilding here means the published
+      # mirror can never be staler than kb/*.pl, whatever was committed.
+      - name: Rebuild web/index.html from kb/
+        run: python build.py
+
+      # If that rebuild changed anything, the committed page was out of date.
+      # Worth saying out loud, but not worth failing a deploy over, because
+      # the tree being published has just been corrected.
+      - name: Warn if the committed page was stale
+        run: |
+          if ! git diff --quiet -- web/index.html; then
+            echo "::warning file=web/index.html::web/index.html was out of date with kb/*.pl. Run build.bat and commit the result."
+          fi
+
+      # Publish only what passes. The suite reasons over the real knowledge
+      # base, so a broken rule stops the deploy instead of reaching the page.
+      - name: Run the test suite
+        run: node test/cases.js
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r kb web _site/
+
+          # Pages serves this artifact as-is, so Jekyll never runs. The file
+          # is here so that a future switch to branch-based publishing does
+          # not silently start skipping files.
+          touch _site/.nojekyll
+
+          # The real page lives at /web/index.html so that ../kb/ resolves.
+          # This sends the bare site root there.
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=web/index.html">
+          <link rel="canonical" href="web/index.html">
+          <title>Glucose Result Release Advisor</title>
+          </head>
+          <body>
+          <p>Redirecting to <a href="web/index.html">the advisor</a>.</p>
+          </body>
+          </html>
+          HTML
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

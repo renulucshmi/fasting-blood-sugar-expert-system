@@ -1,0 +1,8 @@
+# Check every text file out with LF on every platform.
+#
+# test/cases.js corrupts a rule on purpose to prove a broken rule is reported
+# rather than answered as "release", and it finds that rule by matching a
+# literal \n. On a CRLF checkout that match fails and the test reports that it
+# could not break the knowledge base. Pinning the line ending keeps the suite
+# honest on Windows, where Git converts to CRLF by default.
+* text=auto eol=lf
