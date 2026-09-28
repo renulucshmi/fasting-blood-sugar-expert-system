@@ -438,7 +438,7 @@ body.at-home .mast h1 {
 /* The question the whole system settles, and the hypothesis every
    certainty factor is belief about. */
 .hero {
-  margin: 0 0 .25rem;
+  margin: 0;
   max-width: 24ch;
   font-size: 2.1rem;
   font-weight: 500;
@@ -449,10 +449,10 @@ body.at-home .mast h1 {
 /* The knowledge base's own statement of what it will and will not do,
    quoted from boundary/1 rather than written here. */
 .bound {
-  margin: 0 0 2.25rem;
-  max-width: 32rem;
-  font-size: .95rem;
-  line-height: 1.6;
+  margin: .85rem 0 0;
+  max-width: 34rem;
+  font-size: .93rem;
+  line-height: 1.55;
   color: var(--soft);
 }
 

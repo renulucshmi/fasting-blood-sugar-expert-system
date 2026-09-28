@@ -586,12 +586,15 @@
   // What the system is, who it came from, and one button. The description is
   // not written here: boundary/1 is a fact in kb/, so the page says what the
   // knowledge base says it does and the two cannot drift apart.
-  function home() {
+  function home(boundary) {
     screen(
       '<div class="step">' +
         '<h2 class="hero">Is this result fit to release?</h2>' +
-        // Nothing between the question and the way to answer it. A paragraph
-        // sat here before and pushed the button down the page.
+        // boundary/1 is a fact in kb/, so what the page claims the system
+        // does is the knowledge base's own sentence, not the interface's.
+        // It costs about 100px of height, which is a deliberate trade: a
+        // reader should know the scope before they start answering.
+        '<p class="bound">' + esc(boundary) + '</p>' +
         '<button type="button" class="go wide cta" id="startBtn">' +
           'Begin Consultation</button>' +
         '<p class="note">Runs locally in your browser using Tau Prolog. ' +
@@ -696,7 +699,9 @@
   // just goes straight to the entry screen rather than showing nothing.
   loadKnowledgeBase().then(function (text) {
     KB = text;
-    home();
+    run('', [{ q: 'boundary(B).', vars: ['B'] }])
+      .then(function (r) { home(r[0][0] ? r[0][0].B : ''); })
+      .catch(function () { home(''); });
   });
 
 })();
