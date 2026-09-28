@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glucose Result Release Advisor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="warn">Coursework &nbsp;&middot;&nbsp; not for clinical use</p>
+    <h1>Is this result fit to release?</h1>
+    <p>Fasting glucose and HbA1c &middot; CM 3321 &middot; Tau Prolog</p>
+  </header>
+
+  <main id="stage"></main>
+
+  <footer>
+    <p><b>How it works.</b> The knowledge base is ordinary Prolog running in
+    your browser through Tau Prolog. Nothing is sent anywhere. Forward chaining
+    derives the faults from what you enter; backward chaining then proves which
+    action follows. Every question, every verdict and every reason on this page
+    comes from a rule in <code>kb/</code>. The interface decides nothing.</p>
+    <p><b>Why it stops early.</b> Questions are ordered by the best action they
+    could establish. Once a fault is found, everything still unasked could only
+    produce a lower-ranked action, so the system stops. Open <i>Why</i> on any
+    result to see how many questions it skipped and on what grounds.</p>
+    <p><b>Status.</b> Every threshold and fault rule is a draft awaiting the
+    domain expert&rsquo;s confirmation. Knowledge source in use:
+    <span id="kbsource">not loaded yet</span>.</p>
+    <p>Prakasan R. &middot; 224152U &middot; University of Moratuwa</p>
+  </footer>
+
+</div>
+
+<!-- Mirror of kb/*.pl, used when the page is opened straight from disk.
+     Edit kb/*.pl, then run build.bat to refresh this block. -->
+<script type="text/prolog" id="kb">
+__KB__
+</script>
+
+<script src="vendor/tau-prolog.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

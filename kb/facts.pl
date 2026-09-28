@@ -1,5 +1,19 @@
+%% ===========================================================================
+%  FACTS  -  what the system knows
+%%
+%  Glucose Result Release Advisor  -  CM 3321
+%  Prakasan R.  -  224152U
+%%
+%  Everything here is a fact. No rule, no reasoning: the tables the rules
+%  read, and the sentences they hand back.
+%%
+%  The three files in kb/ are consulted together, in this order:
+%      facts.pl  ->  rules.pl  ->  decisions.pl
+%  Nothing in an earlier file depends on a later one.
+%% ===========================================================================
+
 % ============================================================================
-%  kb.pl  -  Glucose Result Release Advisor : knowledge base
+%  kb/facts.pl  -  Glucose Result Release Advisor : knowledge base
 %
 %  CM 3321 Logic Programming and Artificial Cognitive Systems
 %  Prakasan R.  -  224152U
@@ -25,7 +39,6 @@
 %    textbooks and papers. None of it is confirmed by the domain expert yet.
 % ============================================================================
 
-
 % ----------------------------------------------------------------------------
 %  1.  CASE FACTS  -  what is true of this one run
 %      Appended by the interface each time, cleared between reports.
@@ -45,11 +58,7 @@
 :- dynamic(drip_arm/1).
 :- dynamic(label_mismatch/1).
 :- dynamic(transcription_doubt/1).
-:- dynamic(repeat_done/2).        % repeat_done(s, fbs).
-:- dynamic(repeat_agrees/2).
-:- dynamic(patient_factor/2).     % patient_factor(s, iron_deficiency).
-:- dynamic(hba1c_method/2).
-
+:- dynamic(hba1c_method/2).       % hba1c_method(s, boronate).
 
 % ----------------------------------------------------------------------------
 %  2.  DOMAIN FACTS  -  which family each fault belongs to
@@ -75,12 +84,6 @@ fault_family(drip_arm,           collection).
 fault_family(label_mismatch,     identity).
 fault_family(transcription_doubt, identity).
 
-% What each family means for the blood already in the tube.
-blood_still_usable(machine).      % the analyser was wrong, not the specimen
-blood_still_usable(identity).     % except when the label is wrong - see below
-% sample and collection families are NOT listed: fresh blood is needed.
-
-
 % ----------------------------------------------------------------------------
 %  3.  DOMAIN FACTS  -  what each fault does to which test
 %      fault_effect(Fault, Test, Direction, Explanation)
@@ -94,8 +97,6 @@ fault_effect(not_fasting, fbs, high,
     'the patient had eaten, so this is not a fasting value').
 fault_effect(drip_arm, fbs, high,
     'a sample drawn near a running drip carries the drip fluid with it').
-fault_effect(haemolysed, hba1c, unclear,
-    'haemolysis interferes with some HbA1c methods').
 fault_effect(lipaemic, fbs, unclear,
     'turbidity interferes with the reading at 340 nm').
 fault_effect(qc_out, fbs, unclear,
@@ -110,7 +111,6 @@ fault_effect(carryover, fbs, high,
     'a very high sample just before this one can carry into the probe').
 fault_effect(not_cleaned, fbs, unclear,
     'residue in the path contaminates the reading').
-
 
 % ----------------------------------------------------------------------------
 %  4.  DOMAIN FACTS  -  the actions, and what each one means
@@ -151,7 +151,7 @@ fault_label(not_cleaned,         'analyser not cleaned').
 fault_label(haemolysed,          'sample haemolysed').
 fault_label(clotted,             'sample clotted').
 fault_label(lipaemic,            'sample lipaemic').
-fault_label(wrong_tube,          'wrong tube for glucose').
+fault_label(wrong_tube,          'the wrong tube was used').
 fault_label(delayed,             'sample sat too long before separation').
 fault_label(not_fasting,         'patient was not fasting').
 fault_label(drip_arm,            'drawn from the drip arm').
@@ -162,7 +162,6 @@ family_label(machine,    'Machine or reagent').
 family_label(sample,     'The specimen').
 family_label(collection, 'How it was collected').
 family_label(identity,   'Identification or entry').
-
 
 % ----------------------------------------------------------------------------
 %  5.  DOMAIN FACTS  -  limits used for the plausibility check
@@ -184,207 +183,57 @@ critical_high(fbs, 400).
 delta_limit(fbs, 100).          % mg/dL change from the last result before we doubt it
 delta_limit(hba1c, 2.0).
 
-
 % ----------------------------------------------------------------------------
-%  6.  RULES  -  finding the faults
-%      fault(Sample, Family, Cause)
-% ----------------------------------------------------------------------------
-
-% --- machine family ---
-fault(S, machine, qc_out) :-
-    qc_status(S, _, out_of_range).
-fault(S, machine, reagent_expired) :-
-    reagent_lot(S, _, expired).
-fault(S, machine, calibration_overdue) :-
-    calibration(S, _, overdue).
-fault(S, machine, probe_clot) :-
-    analyser_flag(S, probe_clot).
-fault(S, machine, carryover) :-
-    analyser_flag(S, carryover).
-fault(S, machine, not_cleaned) :-
-    instrument_clean(S, no).
-
-% --- sample family ---
-fault(S, sample, haemolysed) :-
-    sample_state(S, haemolysed).
-fault(S, sample, clotted) :-
-    sample_state(S, clotted).
-fault(S, sample, lipaemic) :-
-    sample_state(S, lipaemic).
-fault(S, sample, wrong_tube) :-
-    value(S, Test, _),
-    tube(S, Test, Used),
-    proper_tube(Test, Proper),
-    Used \== Proper.
-fault(S, sample, delayed) :-
-    value(S, fbs, _),
-    delay_hours(S, D),
-    max_delay_hours(fbs, M),
-    D > M.
-
-% --- collection family ---
-fault(S, collection, not_fasting) :-
-    value(S, fbs, _),
-    fasting_hours(S, H),
-    min_fasting_hours(Min),
-    H < Min.
-fault(S, collection, drip_arm) :-
-    drip_arm(S).
-
-% --- identity family ---
-fault(S, identity, label_mismatch) :-
-    label_mismatch(S).
-fault(S, identity, transcription_doubt) :-
-    transcription_doubt(S).
-
-
-% ----------------------------------------------------------------------------
-%  7.  RULES  -  is the blood in the tube still usable?
-%      This single question decides whether the patient is bled again.
+%  6.  THE WORDS
+%
+%  Every sentence the system can say is a fact here. The rules above decide
+%  WHICH sentence applies; this section holds the sentence itself.
+%
+%  These used to be assembled at run time out of fragments with atom_concat.
+%  That put the wording inside the reasoning, where it was hard to read and
+%  harder to check. As facts, every sentence the system is capable of saying
+%  can be read straight off the page - which is also what the domain expert
+%  has to confirm.
+%
+%  Where a sentence needs to name a particular fault or tube, the rule hands
+%  the fault back as well and the interface puts the two together. Joining
+%  two strings for display is formatting, not reasoning.
 % ----------------------------------------------------------------------------
 
-specimen_compromised(S) :-
-    fault(S, sample, _).
-specimen_compromised(S) :-
-    fault(S, collection, _).
-specimen_compromised(S) :-
-    fault(S, identity, label_mismatch).
+% action_reason(Action, Why) - why each action follows.
+action_reason(recollect_urgent,
+    'the label does not match the request, so this may be the wrong patient').
+action_reason(correct_entry,
+    'the result itself is sound, so check what was typed against the analyser').
+action_reason(recollect_teach,
+    'the sample was not collected correctly, and the patient has to be told what to do differently').
+action_reason(recollect,
+    'this specimen cannot give a sound result').
+action_reason(rerun_same_sample,
+    'the analyser was at fault, so the blood in the tube is still good').
+action_reason(release_comment,
+    'no fault found, but the change from the last result is large').
+action_reason(release,
+    'no fault found and the result is plausible').
 
-specimen_intact(S) :-
-    \+ specimen_compromised(S).
+% consistency_reason(Kind, Direction, Why) - does the fault explain the result?
+% Direction is low, high, or any where the sentence does not depend on it.
+consistency_reason(fits, low,
+    'this fault pushes the result down, and this result is low, so it could well be the cause').
+consistency_reason(fits, high,
+    'this fault pushes the result up, and this result is high, so it could well be the cause').
+consistency_reason(clashes, low,
+    'this fault pushes the result up, but this result is low, so it is not what caused that').
+consistency_reason(clashes, high,
+    'this fault pushes the result down, but this result is high, so it is not what caused that').
+consistency_reason(unsure, any,
+    'this fault affects the test, but not in a predictable direction, so this result cannot be judged either way').
+consistency_reason(gap, any,
+    'the knowledge base does not record what this fault does to this test, so this result cannot be judged against it').
+consistency_reason(real, low,
+    'this result is low and nothing found in the run pushes it that way, so treat the low value as the patient''s own until proved otherwise').
+consistency_reason(real, high,
+    'this result is high and nothing found in the run pushes it that way, so treat the high value as the patient''s own until proved otherwise').
 
-
-% ----------------------------------------------------------------------------
-%  8.  RULES  -  is the number itself believable?
-% ----------------------------------------------------------------------------
-
-% Outside what a living patient reaches - doubt the number, not the person.
-implausible(S, Test, 'this value is outside what a patient survives - doubt the number first') :-
-    value(S, Test, V),
-    survivable_low(Test, L),
-    V < L.
-implausible(S, Test, 'this value is outside what a patient survives - doubt the number first') :-
-    value(S, Test, V),
-    survivable_high(Test, H),
-    V > H.
-implausible(S, hba1c, 'this HbA1c is outside the range the assay can report') :-
-    value(S, hba1c, V),
-    impossible_high(hba1c, Max),
-    V > Max.
-
-% Delta check - too big a jump from the patient's own last result.
-delta_fail(S, Test, Why) :-
-    value(S, Test, V),
-    previous_value(S, Test, P),
-    delta_limit(Test, Limit),
-    Diff is abs(V - P),
-    Diff > Limit,
-    Why = 'this is a very large change from the patient''s last result'.
-
-plausible(S) :-
-    \+ implausible(S, _, _),
-    \+ delta_fail(S, _, _).
-
-critical(S, Test, low) :-
-    value(S, Test, V), critical_low(Test, T), V =< T.
-critical(S, Test, high) :-
-    value(S, Test, V), critical_high(Test, T), V >= T.
-
-
-% ----------------------------------------------------------------------------
-%  9.  RULES  -  the decision
-%      Each carries its reason, which is what the explanation facility reports.
-% ----------------------------------------------------------------------------
-
-% 1. Identification first. Nothing else matters if this is the wrong patient.
-possible_action(S, recollect_urgent,
-    'the label does not match the request - this may be the wrong patient') :-
-    fault(S, identity, label_mismatch).
-
-% 2. A typing doubt needs no new blood at all.
-possible_action(S, correct_entry,
-    'the result itself is sound - check what was typed against the analyser') :-
-    fault(S, identity, transcription_doubt),
-    \+ fault(S, sample, _),
-    \+ fault(S, collection, _),
-    \+ fault(S, machine, _).
-
-% 3. Collection fault - fresh blood AND the patient has to be told something.
-possible_action(S, recollect_teach, Why) :-
-    fault(S, collection, Cause),
-    fault_label(Cause, Label),
-    instruction(Cause, What),
-    atom_concat(Label, ', so: ', Part),
-    atom_concat(Part, What, Why).
-
-% 4. Sample fault - fresh blood, nothing to teach the patient.
-possible_action(S, recollect, Why) :-
-    fault(S, sample, Cause),
-    fault_label(Cause, Label),
-    atom_concat(Label, ' - this specimen cannot give a sound result', Why).
-
-% 5. Machine fault with the specimen intact - re-run, do not re-bleed.
-possible_action(S, rerun_same_sample, Why) :-
-    fault(S, machine, Cause),
-    specimen_intact(S),
-    fault_label(Cause, Label),
-    atom_concat(Label, ' - the analyser was at fault, so the blood is still good', Why).
-
-% 6. Nothing found, but the number cannot be right.
-possible_action(S, escalate, Why) :-
-    \+ fault(S, _, _),
-    implausible(S, _, Why).
-
-possible_action(S, escalate,
-    'repeated and still the same, with no fault found - the senior decides') :-
-    repeat_done(S, Test),
-    repeat_agrees(S, Test),
-    \+ fault(S, _, _),
-    \+ plausible(S).
-
-% 7. Nothing found, plausible, but worth a note on the report.
-possible_action(S, release_comment,
-    'no fault found, but the change from the last result is large') :-
-    \+ fault(S, _, _),
-    delta_fail(S, _, _).
-
-% 8. Clean.
-possible_action(S, release,
-    'no fault found and the result is plausible') :-
-    \+ fault(S, _, _),
-    plausible(S).
-
-
-% decision/3 - the single action the laboratory should take.
-% The lowest-ranked possible action wins; the rest are reported as well.
-decision(S, Action, Why) :-
-    possible_action(S, Action, Why),
-    action_rank(Action, R),
-    \+ ( possible_action(S, Other, _),
-         action_rank(Other, R2),
-         R2 < R ).
-
-
-% also_fix/2 - a machine fault alongside a recollection still has to be fixed.
-also_fix(S, Why) :-
-    fault(S, machine, Cause),
-    specimen_compromised(S),
-    fault_label(Cause, Label),
-    atom_concat('Fix this before running the new sample: ', Label, Why).
-
-
-% ----------------------------------------------------------------------------
-%  10.  RULES  -  which way the result was pushed, where that is known
-% ----------------------------------------------------------------------------
-
-direction(S, Test, Cause, Direction, Why) :-
-    fault(S, _, Cause),
-    value(S, Test, _),
-    fault_effect(Cause, Test, Direction, Why).
-
-
-% ----------------------------------------------------------------------------
-%  11.  RULES  -  the standing boundary
-% ----------------------------------------------------------------------------
-
-boundary('This system decides whether a result is fit to leave the laboratory. It does not interpret what the result means for the patient - that is the clinician''s work.').
+% What the interface prefixes an also_fix/2 cause with.
+also_fix_prefix('Fix this before running the new sample:').
