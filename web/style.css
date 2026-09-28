@@ -391,49 +391,48 @@ footer p { margin: 0 0 .5rem; }
    nowhere else - a consultation still reads one question in a narrow
    column, which is what the rest of this stylesheet is built around. */
 
-body.at-home .wrap  { max-width: 48rem; padding-top: 3rem; }
-body.at-home .mast  { margin-bottom: 2.5rem; }
+body.at-home .wrap { max-width: 44rem; padding-top: 3rem; }
+body.at-home .mast { margin-bottom: 2.25rem; }
+
+/* The title names the system; the QUESTION is the focal point. Two headings
+   at similar weight left the eye with nowhere to land, so the title is set
+   back and the question carries the page. */
 body.at-home .mast h1 {
-  font-size: 2.15rem;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -.022em;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -.015em;
 }
 
 /* The question the whole system settles, and the hypothesis every
    certainty factor is belief about. */
 .hero {
-  margin: 0 0 .85rem;
-  font-size: 1.4rem;
+  margin: 0 0 1rem;
+  max-width: 24ch;
+  font-size: 2.1rem;
   font-weight: 500;
-  line-height: 1.3;
-  letter-spacing: -.015em;
+  line-height: 1.2;
+  letter-spacing: -.025em;
 }
 
 /* The knowledge base's own statement of what it will and will not do,
    quoted from boundary/1 rather than written here. */
 .bound {
-  margin: 0 0 2rem;
-  max-width: 34rem;
+  margin: 0 0 2.25rem;
+  max-width: 32rem;
   font-size: .95rem;
   line-height: 1.6;
   color: var(--soft);
 }
 
-.card {
-  margin: 0 0 1.75rem;
-  padding: 1.5rem 1.6rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #fff;
-}
-
-.card .pair {
+/* A white card on a near-white page added a box and almost no contrast.
+   A hairline and three columns do the same job with less furniture. */
+.credits {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.6rem;
-  margin-top: 1.5rem;
-  padding-top: 1.4rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.75rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
   border-top: 1px solid var(--line);
 }
 
@@ -445,8 +444,8 @@ body.at-home .mast h1 {
   color: var(--faint);
 }
 
-.val { margin: .35rem 0 0; font-size: .95rem; line-height: 1.5; }
-.val .sub { color: var(--soft); font-size: .85rem; }
+.val { margin: .4rem 0 0; font-size: .9rem; line-height: 1.5; }
+.val .sub { color: var(--faint); font-size: .82rem; }
 
 .note {
   margin: .9rem 0 0;
@@ -456,11 +455,15 @@ body.at-home .mast h1 {
   color: var(--faint);
 }
 
+@media (max-width: 46rem) {
+  .credits { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 34rem) {
   body.at-home .wrap { max-width: none; }
-  body.at-home .mast h1 { font-size: 1.65rem; }
-  .card { padding: 1.25rem 1.2rem; }
-  .card .pair { grid-template-columns: 1fr; gap: 1.3rem; }
+  body.at-home .mast h1 { font-size: 1.3rem; }
+  .hero { font-size: 1.7rem; max-width: none; }
+  .credits { grid-template-columns: 1fr; gap: 1.3rem; margin-top: 2.5rem; }
 }
 
 /* The certainty factor under the verdict. Quiet on purpose: it states a

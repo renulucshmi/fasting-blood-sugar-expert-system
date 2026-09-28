@@ -593,28 +593,31 @@
         // boundary/1 is a fact in kb/, so what the page claims the system
         // does is the knowledge base's own sentence, not the interface's.
         '<p class="bound">' + esc(boundary) + '</p>' +
-        '<section class="card">' +
-          '<h3 class="lbl">Module</h3>' +
-          '<p class="val">CM 3321 &middot; Logic Programming and Artificial ' +
-          'Cognitive Systems</p>' +
-          '<div class="pair">' +
-            '<div>' +
-              '<h3 class="lbl">Developed by</h3>' +
-              '<p class="val">Prakasan R.' +
-              '<br><span class="sub">224152U &middot; University of Moratuwa</span></p>' +
-            '</div>' +
-            '<div>' +
-              '<h3 class="lbl">Domain expert</h3>' +
-              '<p class="val">Shangavie Subramaniyam' +
-              '<br><span class="sub">BSc in Biomedical Science' +
-              '<br>Technical Officer &middot; Clinical Laboratory</span></p>' +
-            '</div>' +
-          '</div>' +
-        '</section>' +
         '<button type="button" class="go wide" id="startBtn">' +
           'Begin Consultation &rarr;</button>' +
         '<p class="note">Runs locally in your browser using Tau Prolog. ' +
         'No data is transmitted.</p>' +
+        // Reference, not the point of the page, so it sits after the action
+        // and is set quietly. The marker still finds the expert in one look.
+        '<section class="credits">' +
+          '<div>' +
+            '<h3 class="lbl">Module</h3>' +
+            '<p class="val">CM 3321' +
+            '<br><span class="sub">Logic Programming and Artificial ' +
+            'Cognitive Systems</span></p>' +
+          '</div>' +
+          '<div>' +
+            '<h3 class="lbl">Developed by</h3>' +
+            '<p class="val">Prakasan R.' +
+            '<br><span class="sub">224152U</span></p>' +
+          '</div>' +
+          '<div>' +
+            '<h3 class="lbl">Domain expert</h3>' +
+            '<p class="val">Shangavie Subramaniyam' +
+            '<br><span class="sub">BSc Biomedical Science' +
+            '<br>Technical Officer, clinical laboratory</span></p>' +
+          '</div>' +
+        '</section>' +
       '</div>');
     document.body.classList.add('at-home');
     el('startBtn').onclick = reset;
