@@ -343,7 +343,8 @@
       { q: 'method_in_use(s, N).',                                      vars: ['N'] },
       { q: 'method_not_recorded(s, W).',                                vars: ['W'] },
       { q: 'fix_before_rerun(s, C, W), fix_first_prefix(P).',           vars: ['C', 'W', 'P'] },
-      { q: 'no_margin_for_rerun(s, T), no_margin_text(W).',             vars: ['T', 'W'] }
+      { q: 'no_margin_for_rerun(s, T), no_margin_text(W).',             vars: ['T', 'W'] },
+      { q: 'next_step(s, C, W), next_step_prefix(P).',                  vars: ['C', 'W', 'P'] }
     ]).then(render).catch(fail);
   }
 
@@ -368,6 +369,7 @@
     var alsoFix = uniq(r[3], function (x) { return x.C; });
     var fixFirst = uniq(r[18], function (x) { return x.C; });
     var noMargin = uniq(r[19], function (x) { return x.W; });
+    var nextStep = uniq(r[20], function (x) { return x.C; });
     var crit = uniq(r[4], function (x) { return x.T + x.D; });
     var fits = uniq(r[5], function (x) { return x.C; });
     var clash = uniq(r[6], function (x) { return x.C; });
@@ -394,6 +396,18 @@
         ? 'The blood in the tube is still good, so the patient does not need to be bled again.'
         : 'Fresh blood is needed. Re-running this tube would only repeat the error.') +
         '</p>';
+    }
+
+    // What the technologist actually does, beyond the action label. The label
+    // says "tell the patient what to do"; these say what. Two sources: the
+    // patient advice in instruction/2, via next_step/3, and the tube detail
+    // that fault_note/5 already works out. Both used to be reachable only
+    // from inside the Why panel, or not at all.
+    if (nextStep.length || notes.wrong_tube) {
+      h += '<p class="crit">';
+      nextStep.forEach(function (x) { h += esc(x.P + ' ' + x.W) + '. '; });
+      (notes.wrong_tube || []).forEach(function (n) { h += esc(cap(n)) + '. '; });
+      h += '</p>';
     }
 
     if (crit.length) {

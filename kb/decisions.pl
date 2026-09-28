@@ -35,6 +35,17 @@ possible_action(S, recollect_teach, Why) :-
     instruction(Cause, _),
     action_reason(recollect_teach, Why).
 
+% next_step/3 - what is actually done about this fault, beyond the label.
+%
+% The label says "tell the patient what to do" and, until now, never said
+% what. instruction/2 held the sentence, and the only rule that touched it
+% read instruction(Cause, _) - confirming advice EXISTS and discarding it.
+% The interface never asked for it either, so the knowledge was there and the
+% person reading the screen never saw it. This hands it back.
+next_step(S, Cause, What) :-
+    fault(S, _, Cause),
+    instruction(Cause, What).
+
 % 4. Sample fault - fresh blood, nothing to teach the patient.
 possible_action(S, recollect, Why) :-
     fault(S, sample, _),

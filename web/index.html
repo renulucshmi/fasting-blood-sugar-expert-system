@@ -375,6 +375,12 @@ also_fix_prefix('Fix this before running the new sample:').
 % And what it prefixes a fix_before_rerun/3 instruction with.
 fix_first_prefix('Put this right before the re-run:').
 
+% And what it prefixes a next_step/3 instruction with. Deliberately neutral:
+% instruction/2 holds advice for whoever acts on it next, and that is not
+% always the patient. "Fast for eight hours" is for the patient; "draw from
+% the opposite arm" is for whoever takes the fresh sample.
+next_step_prefix('For the fresh sample:').
+
 % Said when a re-run is the right action but the tube has no handling time
 % left to survive the correction that has to come first.
 no_margin_text('This tube has already used all of its handling time, and the analyser has to be put right before it can be run again. If that correction is not immediate, take fresh blood rather than re-running this tube.').
@@ -843,6 +849,17 @@ possible_action(S, recollect_teach, Why) :-
     fault(S, collection, Cause),
     instruction(Cause, _),
     action_reason(recollect_teach, Why).
+
+% next_step/3 - what is actually done about this fault, beyond the label.
+%
+% The label says "tell the patient what to do" and, until now, never said
+% what. instruction/2 held the sentence, and the only rule that touched it
+% read instruction(Cause, _) - confirming advice EXISTS and discarding it.
+% The interface never asked for it either, so the knowledge was there and the
+% person reading the screen never saw it. This hands it back.
+next_step(S, Cause, What) :-
+    fault(S, _, Cause),
+    instruction(Cause, What).
 
 % 4. Sample fault - fresh blood, nothing to teach the patient.
 possible_action(S, recollect, Why) :-

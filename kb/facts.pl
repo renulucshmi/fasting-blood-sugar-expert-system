@@ -340,6 +340,12 @@ also_fix_prefix('Fix this before running the new sample:').
 % And what it prefixes a fix_before_rerun/3 instruction with.
 fix_first_prefix('Put this right before the re-run:').
 
+% And what it prefixes a next_step/3 instruction with. Deliberately neutral:
+% instruction/2 holds advice for whoever acts on it next, and that is not
+% always the patient. "Fast for eight hours" is for the patient; "draw from
+% the opposite arm" is for whoever takes the fresh sample.
+next_step_prefix('For the fresh sample:').
+
 % Said when a re-run is the right action but the tube has no handling time
 % left to survive the correction that has to come first.
 no_margin_text('This tube has already used all of its handling time, and the analyser has to be put right before it can be run again. If that correction is not immediate, take fresh blood rather than re-running this tube.').

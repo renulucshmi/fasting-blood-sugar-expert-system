@@ -1153,6 +1153,62 @@ const INVARIANTS = [
       return problems;
     }
   }
+
+  ,{
+    name: 'an action that promises to tell the patient something says what',
+    // recollect_teach is labelled "Take a fresh sample, and tell the patient
+    // what to do", and its rule read instruction(Cause, _): it confirmed that
+    // advice existed and discarded it. app.js never queried instruction/2
+    // either. So the knowledge was in the knowledge base, the rule depended
+    // on it, and the person reading the screen was told to tell the patient
+    // something without ever being told what.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+      const base = 'value(s,fbs,140). tube(s,fbs,fluoride). delay_hours(s,0).';
+      const evidence = {
+        not_fasting: 'fasting_hours(s,3).',
+        drip_arm:    'fasting_hours(s,10). drip_arm(s).'
+      };
+
+      const causes = await query(probe, 'fault_family(C, collection).', ['C']);
+      if (!causes.length) problems.push('no collection-family causes at all');
+
+      for (const { C } of causes) {
+        if (!evidence[C]) { problems.push(`no evidence written for ${C}`); continue; }
+        const s = await load(`${base} ${evidence[C]}`);
+        await query(s, 'forward_chain.');
+
+        const dec = await query(s, 'decision(s, A, _).', ['A']);
+        if (!dec.length || dec[0].A !== 'recollect_teach') {
+          problems.push(`${C}: expected recollect_teach, got ` +
+                        `${dec.length ? dec[0].A : 'no decision'}`);
+          continue;
+        }
+        const step = await query(s, `next_step(s, ${C}, W).`, ['W']);
+        if (!step.length) {
+          problems.push(`${C}: the action promises to tell the patient what to ` +
+                        `do and nothing says what`);
+        } else if (!step[0].W || step[0].W.trim().length < 10) {
+          problems.push(`${C}: the advice handed back is empty or a stub`);
+        }
+      }
+
+      // And the interface has to actually ask for it. The defect was not only
+      // in the rule: app.js never queried instruction/2 or next_step/3 at all.
+      if (!/next_step\s*\(/.test(APP_JS)) {
+        problems.push('app.js never queries next_step/3, so the advice ' +
+                      'cannot reach the screen');
+      }
+      // The wrong-tube detail had the same shape: computed, but rendered only
+      // inside the Why panel. It has to appear on the result itself.
+      if (!APP_JS.includes('notes.wrong_tube')) {
+        problems.push('the wrong-tube detail is not shown on the result, ' +
+                      'only inside the Why panel');
+      }
+      return problems;
+    }
+  }
 ];
 
 // ------------------------------------------------- integration: consultations

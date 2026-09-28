@@ -215,7 +215,7 @@ the tests would be reasoning over different programs.
 
 ## How the knowledge is organised
 
-**74 rules and 206 facts**, in sixteen numbered sections across three files.
+**75 rules and 207 facts**, in sixteen numbered sections across three files.
 
 **Case facts** — what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
@@ -324,6 +324,15 @@ the same way `boundary/1` leaves the clinical reading to the clinician.
 Inventing a correction time would have been the easier rule and the dishonest
 one.
 
+**And an action that promises advice has to give it.** `recollect_teach` is
+labelled *"Take a fresh sample, and tell the patient what to do"*, and its rule
+read `instruction(Cause, _)` - confirming that advice existed and discarding
+it. The interface never asked for `instruction/2` at all. So the sentence sat
+in the knowledge base, the decision depended on it, and the screen told the
+technologist to tell the patient something without saying what. `next_step/3`
+hands it back. The wrong-tube detail had the same shape: `fault_note/5` worked
+out which tube was needed and it was rendered only inside the *Why* panel.
+
 ---
 
 ## Testing
@@ -332,13 +341,13 @@ one.
 node test/cases.js
 ```
 
-**68 tests in three layers.**
+**69 tests in three layers.**
 
 **38 knowledge-base cases.** Facts in, expected action out. Each one also
 checks *which rule fired*, because a right answer from the wrong rule is a bug
 waiting to surface.
 
-**18 structural invariants.** These test properties of the knowledge base
+**19 structural invariants.** These test properties of the knowledge base
 rather than single cases:
 
 - `fault_family/2` is the only thing that assigns a family, and editing one
@@ -354,6 +363,8 @@ rather than single cases:
 - the two corrective paths, `also_fix/2` and `fix_before_rerun/3`, never both
   fire and never both stay silent
 - a tube with no handling time left is never sent to a re-run in silence
+- an action that promises to tell the patient something actually says what,
+  and the interface actually asks for it
 - the handling margin never contradicts the `delayed` fault: a specimen past
   the limit is compromised, not warned about a re-run it will not get
 
