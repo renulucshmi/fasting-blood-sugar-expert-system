@@ -80,6 +80,18 @@ also_fix(S, Cause) :-
     fault(S, machine, Cause),
     specimen_compromised(S).
 
+% fix_before_rerun/3 - the mirror of also_fix/2, and the case it was missing.
+%
+% also_fix/2 covers the patient being bled again anyway, with the analyser
+% still to be put right afterwards. This covers the other side: the specimen
+% is sound, so the action is a re-run - and the re-run reproduces the fault
+% unless the analyser is corrected FIRST. Without this the system answered
+% "re-run the same sample" on the same expired reagent.
+fix_before_rerun(S, Cause, What) :-
+    fault(S, machine, Cause),
+    specimen_intact(S),
+    fix_first(Cause, What).
+
 % ----------------------------------------------------------------------------
 %  2.  RULES  -  the standing boundary
 % ----------------------------------------------------------------------------

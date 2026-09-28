@@ -998,6 +998,90 @@ const INVARIANTS = [
       return problems;
     }
   }
+
+  ,{
+    name: 'every machine fault has a corrective action',
+    // Structural guard. A machine fault leaves the specimen intact, so the
+    // action is a re-run. Add a machine cause to fault_family/2 without a
+    // fix_first/2 line and the system would order that re-run with nothing
+    // said about the fault still sitting in the analyser. This fails instead.
+    run: async () => {
+      const problems = [];
+      const s = await load('');
+      const causes = await query(s, 'fault_family(C, machine).', ['C']);
+      if (causes.length < 6) problems.push(`only ${causes.length} machine causes found`);
+      for (const { C } of causes) {
+        const fix = await query(s, `fix_first(${C}, W).`, ['W']);
+        if (!fix.length) problems.push(`${C} is a machine fault with no fix_first/2 entry`);
+        if (fix.length > 1) problems.push(`${C} has ${fix.length} fix_first/2 entries`);
+      }
+      return problems;
+    }
+  }
+
+  ,{
+    name: 'a re-run is never ordered without naming what to put right first',
+    // The defect this catches: an expired reagent is a machine fault, so the
+    // system answered "re-run the same sample" - on the same expired reagent.
+    // The re-run would reproduce the fault exactly. also_fix/2 did not cover
+    // it, because also_fix/2 only fires when the specimen is compromised.
+    // Every machine cause is now driven through to the decision and must
+    // carry the corrective action that has to happen first.
+    run: async () => {
+      const problems = [];
+      const probe = await load('');
+      const evidence = {
+        qc_out:              'qc_status(s,fbs,out_of_range).',
+        reagent_expired:     'reagent_lot(s,fbs,expired).',
+        calibration_overdue: 'calibration(s,fbs,overdue).',
+        probe_clot:          'analyser_flag(s,probe_clot).',
+        carryover:           'analyser_flag(s,carryover).',
+        not_cleaned:         'instrument_clean(s,no).'
+      };
+      for (const { C } of await query(probe, 'fault_family(C, machine).', ['C'])) {
+        if (!evidence[C]) { problems.push(`no evidence written for ${C}`); continue; }
+        const s = await load(`value(s,fbs,94). ${CLEAN} ${evidence[C]}`);
+        await query(s, 'forward_chain.');
+        const dec = await query(s, 'decision(s, A, _).', ['A']);
+        if (!dec.length || dec[0].A !== 'rerun_same_sample') {
+          problems.push(`${C}: expected rerun_same_sample, got ` +
+                        `${dec.length ? dec[0].A : 'no decision'}`);
+          continue;
+        }
+        const fix = await query(s, 'fix_before_rerun(s, C, W).', ['C', 'W']);
+        if (!fix.length) {
+          problems.push(`${C}: a re-run was ordered with nothing to put right first`);
+        }
+      }
+      return problems;
+    }
+  }
+
+  ,{
+    name: 'the two corrective paths never both fire',
+    // fix_before_rerun/3 is for an intact specimen, also_fix/2 for a
+    // compromised one. They are mirrors of each other, so for any machine
+    // fault exactly one of them applies - never both, and never neither.
+    run: async () => {
+      const problems = [];
+      for (const [label, extra] of [
+        ['intact specimen',      'qc_status(s,fbs,out_of_range).'],
+        ['compromised specimen', 'qc_status(s,fbs,out_of_range). sample_state(s,haemolysed).']
+      ]) {
+        const s = await load(`value(s,fbs,94). ${CLEAN} ${extra}`);
+        await query(s, 'forward_chain.');
+        const before = await query(s, 'fix_before_rerun(s, _, _).');
+        const also   = await query(s, 'also_fix(s, _).');
+        if (before.length && also.length) {
+          problems.push(`${label}: both fix_before_rerun and also_fix fired`);
+        }
+        if (!before.length && !also.length) {
+          problems.push(`${label}: a machine fault produced neither corrective path`);
+        }
+      }
+      return problems;
+    }
+  }
 ];
 
 // ------------------------------------------------- integration: consultations

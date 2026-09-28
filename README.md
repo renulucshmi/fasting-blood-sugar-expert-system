@@ -215,7 +215,7 @@ the tests would be reasoning over different programs.
 
 ## How the knowledge is organised
 
-**71 rules and 198 facts**, in sixteen numbered sections across three files.
+**72 rules and 205 facts**, in sixteen numbered sections across three files.
 
 **Case facts** — what is true of one run. Built from the answers each time, so
 nothing carries over between consultations.
@@ -303,6 +303,14 @@ reassurance about specimens that were being thrown away.
 recollected anyway, `also_fix/2` brings the analyser problem back as a separate
 line, so the fresh tube does not meet the same broken machine.
 
+**And a re-run never repeats the fault that caused it.** A machine fault leaves
+the blood in the tube innocent, so the action is a re-run rather than a fresh
+draw. But re-running on the same expired lot, the same overdue calibration or
+the same dirty probe reproduces the error exactly. `fix_before_rerun/3` is the
+mirror of `also_fix/2` for that case: it reads `fix_first/2` and names what has
+to be put right first. Every machine-family cause must have an entry there, and
+a test fails if one is ever added without it.
+
 ---
 
 ## Testing
@@ -311,13 +319,13 @@ line, so the fresh tube does not meet the same broken machine.
 node test/cases.js
 ```
 
-**63 tests in three layers.**
+**66 tests in three layers.**
 
 **38 knowledge-base cases.** Facts in, expected action out. Each one also
 checks *which rule fired*, because a right answer from the wrong rule is a bug
 waiting to surface.
 
-**13 structural invariants.** These test properties of the knowledge base
+**16 structural invariants.** These test properties of the knowledge base
 rather than single cases:
 
 - `fault_family/2` is the only thing that assigns a family, and editing one
@@ -328,6 +336,10 @@ rather than single cases:
 - every question the knowledge base asks can be answered by the interface
 - silence in `fault_effect/4` never becomes "probably real"
 - a broken rule is reported, never answered as "release"
+- every machine fault has a corrective action to perform before the re-run
+- a re-run is never ordered without naming what to put right first
+- the two corrective paths, `also_fix/2` and `fix_before_rerun/3`, never both
+  fire and never both stay silent
 
 **12 consultations.** These drive the whole thing end to end — the real
 question order, the real stopping rule, and the real answer-to-fact mapping

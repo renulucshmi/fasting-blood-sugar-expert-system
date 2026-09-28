@@ -341,7 +341,8 @@
       { q: 'unrecorded_effect(s, T, C, W), fault_label(C, CL).',        vars: ['C', 'CL', 'W'] },
       { q: 'stopped_early(W).',                                         vars: ['W'] },
       { q: 'method_in_use(s, N).',                                      vars: ['N'] },
-      { q: 'method_not_recorded(s, W).',                                vars: ['W'] }
+      { q: 'method_not_recorded(s, W).',                                vars: ['W'] },
+      { q: 'fix_before_rerun(s, C, W), fix_first_prefix(P).',           vars: ['C', 'W', 'P'] }
     ]).then(render).catch(fail);
   }
 
@@ -364,6 +365,7 @@
     var faults = uniq(r[1], function (x) { return x.C; });
     var intact = r[2].length > 0;
     var alsoFix = uniq(r[3], function (x) { return x.C; });
+    var fixFirst = uniq(r[18], function (x) { return x.C; });
     var crit = uniq(r[4], function (x) { return x.T + x.D; });
     var fits = uniq(r[5], function (x) { return x.C; });
     var clash = uniq(r[6], function (x) { return x.C; });
@@ -405,6 +407,14 @@
     if (alsoFix.length) {
       h += '<p class="crit">';
       alsoFix.forEach(function (x) { h += esc(x.P + ' ' + x.L) + '. '; });
+      h += '</p>';
+    }
+
+    // The specimen is sound, so the action is a re-run - which would repeat
+    // the fault unless the analyser is put right first. See fix_before_rerun/3.
+    if (fixFirst.length) {
+      h += '<p class="crit">';
+      fixFirst.forEach(function (x) { h += esc(x.P + ' ' + x.W) + '. '; });
       h += '</p>';
     }
 

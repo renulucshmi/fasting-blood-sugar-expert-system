@@ -198,6 +198,22 @@ instruction(not_fasting,
 instruction(drip_arm,
     'draw from the opposite arm, away from any running drip').
 
+% What has to be put right before the analyser is trusted again.
+%
+% A machine fault leaves the blood in the tube innocent, so the action is a
+% re-run and not a fresh draw. But re-running on the same expired lot, the
+% same overdue calibration or the same dirty probe only reproduces the error.
+% Every machine-family cause needs a line here, and a test enforces that: a
+% new machine fault added to fault_family/2 without its corrective action
+% fails the suite rather than quietly telling someone to repeat a broken run.
+% [local policy]
+fix_first(qc_out,              'investigate the control and repeat it').
+fix_first(reagent_expired,     'replace the reagent lot').
+fix_first(calibration_overdue, 'recalibrate the assay').
+fix_first(probe_clot,          'clear the probe').
+fix_first(carryover,           'run a wash cycle').
+fix_first(not_cleaned,         'run the cleaning cycle').
+
 % Plain-English names for the faults.
 fault_label(qc_out,              'quality control out of range').
 fault_label(reagent_expired,     'reagent lot past its expiry').
@@ -293,7 +309,7 @@ action_reason(recollect_teach,
 action_reason(recollect,
     'this specimen cannot give a sound result').
 action_reason(rerun_same_sample,
-    'the analyser was at fault, so the blood in the tube is still good').
+    'the analyser was at fault, so the blood in the tube is still good - but the analyser has to be put right before the sample is run again').
 action_reason(release_comment,
     'no fault found, but the change from the last result is large').
 action_reason(release,
@@ -320,3 +336,6 @@ consistency_reason(real, high,
 
 % What the interface prefixes an also_fix/2 cause with.
 also_fix_prefix('Fix this before running the new sample:').
+
+% And what it prefixes a fix_before_rerun/3 instruction with.
+fix_first_prefix('Put this right before the re-run:').
