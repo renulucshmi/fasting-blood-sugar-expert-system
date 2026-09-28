@@ -576,6 +576,41 @@
 
   // ------------------------------------------------------------------- start
 
+  // ------------------------------------------------------------------- home
+  //
+  // What the system is, who it came from, and one button. The description is
+  // not written here: boundary/1 is a fact in kb/, so the page says what the
+  // knowledge base says it does and the two cannot drift apart.
+  function home(boundary) {
+    screen(
+      '<div class="step">' +
+        '<p class="lede">A rule-based expert system for the laboratory bench. ' +
+        'Every consultation settles one question: <b>is this result fit to ' +
+        'release?</b></p>' +
+        // boundary/1 is a fact in kb/, so what the page claims the system
+        // does is the knowledge base's own sentence, not the interface's.
+        '<p class="bound">' + esc(boundary) + '</p>' +
+        '<dl class="meta">' +
+          '<dt>Module</dt>' +
+          '<dd>CM 3321 &middot; Logic Programming and Artificial Cognitive Systems</dd>' +
+          '<dt>Built by</dt>' +
+          '<dd>Prakasan R. &middot; 224152U, University of Moratuwa</dd>' +
+          '<dt>Domain expert</dt>' +
+          '<dd>Shangavie Subramaniyam, BSc in Biomedical Science' +
+          '<br><span class="sub">Technical Officer, clinical laboratory</span></dd>' +
+          '<dt>Knowledge base</dt>' +
+          '<dd>Prolog, reasoned in your browser by Tau Prolog</dd>' +
+        '</dl>' +
+        '<p class="hint">It asks one question at a time and stops as soon as ' +
+        'nothing still unasked could change the answer. Every verdict comes ' +
+        'from a rule, and the reasoning is there to open. Nothing is sent ' +
+        'anywhere.</p>' +
+        '<button type="button" class="go wide" id="startBtn">Begin</button>' +
+      '</div>');
+    el('startBtn').onclick = reset;
+    el('startBtn').focus();
+  }
+
   function reset() {
     screen(
       '<div class="step">' +
@@ -641,6 +676,14 @@
       });
   }
 
-  loadKnowledgeBase().then(function (text) { KB = text; reset(); });
+  // The home screen quotes boundary/1, so the knowledge base has to answer
+  // before it can be drawn. If that query fails the page still opens - it
+  // just goes straight to the entry screen rather than showing nothing.
+  loadKnowledgeBase().then(function (text) {
+    KB = text;
+    run('', [{ q: 'boundary(B).', vars: ['B'] }])
+      .then(function (r) { home(r[0][0] ? r[0][0].B : ''); })
+      .catch(reset);
+  });
 
 })();

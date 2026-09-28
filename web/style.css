@@ -370,6 +370,50 @@ footer p { margin: 0 0 .5rem; }
   .verdict h2 { font-size: 1.5rem; }
 }
 
+/* ----------------------------------------------------------------- home */
+
+.lede {
+  margin: 0 0 1.6rem;
+  font-size: 1.02rem;
+  line-height: 1.6;
+}
+
+.meta {
+  margin: 0 0 1.6rem;
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: .55rem 1rem;
+  font-size: .88rem;
+}
+
+/* The knowledge base's own statement of what it will and will not do. Set
+   apart, because it is quoted from kb/ rather than written here. */
+.bound {
+  margin: 0 0 1.7rem;
+  padding-left: .9rem;
+  border-left: 2px solid var(--line);
+  font-size: .88rem;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+/* The standing note under the credits. Quieter than the lede above it. */
+.hint {
+  margin: 0 0 1.7rem;
+  font-size: .86rem;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+.meta dt { color: var(--faint); }
+.meta dd { margin: 0; }
+.meta .sub { color: var(--faint); font-size: .82rem; }
+
+@media (max-width: 30rem) {
+  .meta { grid-template-columns: 1fr; gap: .15rem; }
+  .meta dd { margin-bottom: .7rem; }
+}
+
 /* The certainty factor under the verdict. Quiet on purpose: it states a
    belief about the hypothesis, it does not decide the action above it. */
 .standing {
