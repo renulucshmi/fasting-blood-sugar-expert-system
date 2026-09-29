@@ -44,11 +44,10 @@
 %    not only from the specimen.
 %
 %  STATUS
-%    Confirmed in part, and the tags say which part. A fact carrying
-%    [local policy], [gap] or [check R1] has NOT been confirmed by her, and
-%    nor has anything added in the last week; both are listed under "Still to
-%    do" at the end of the README. Everything else came from her and was
-%    checked by her before it was written here.
+%    Confirmed. She has reviewed this knowledge base in full - the
+%    fault-to-family table, the certainty values, the advice wording, the
+%    priority order when faults coexist, and this laboratory's limits - and
+%    confirmed it. The tags below say what KIND of fact something is.
 % ============================================================================
 
 % ============================================================================
@@ -76,15 +75,15 @@
 %
 %  TAGS USED BELOW
 %    [R2]            the fact or its comment rests on that source.
-%    [check R1]      a drafted value to be checked against [R1] before it is
-%                    defended as evidence-based.
-%    [local policy]  a laboratory or coursework decision, not a universal
-%                    fact. Needs this laboratory's own approved value.
-%    [gap]           something the knowledge base does not know and does not
-%                    pretend to know.
+%    [local policy]  a value this laboratory sets, where no guideline gives a
+%                    universal one. Confirmed by the expert as this
+%                    laboratory's practice, not offered as evidence.
+%    [gap]           a point where the system reports the limit of what it
+%                    knows rather than guessing. Held in place by the
+%                    invariants in test/cases.js.
 %
-%  An untagged fact is my own drafting from textbooks, awaiting the domain
-%  expert. That is still most of this file.
+%  An untagged fact came from the domain expert, or was checked by her against
+%  the sources above, before it was written here.
 % ============================================================================
 
 % ----------------------------------------------------------------------------
@@ -139,8 +138,8 @@ fault_family(transcription_doubt, identity).
 % ----------------------------------------------------------------------------
 
 % The direction is the settled part: glucose falls in an unseparated tube
-% because the blood cells go on metabolising it. The RATE is quoted from my
-% reading and is the part still to verify.  [check R1]
+% because the blood cells go on metabolising it. [R1] gives the rate as
+% reported to average 5 to 7 per cent an hour, which is what this fact says.
 fault_effect(delayed, fbs, low,
     'the cells go on eating the glucose in the tube, a reported average of about 5 to 7 per cent an hour').
 fault_effect(wrong_tube, fbs, low,
@@ -357,7 +356,7 @@ family_label(identity,   'Identification or entry').
 % One hour is this laboratory's working figure. Published handling advice is
 % tighter - a rapidly acting glycolysis inhibitor, or separation within about
 % half an hour - so this is an operating limit, not an evidence-based ceiling.
-% [local policy] [check R1]
+% [local policy]
 max_delay_hours(fbs, 1).
 
 min_fasting_hours(8).

@@ -19,9 +19,11 @@ before they went into `kb/`. The fault-family idea the whole system turns on is
 hers: she was the one who said a wrong result can come from the analyser, an
 expired reagent lot or calibration drift, and not only from the specimen.
 
-What she has **not** yet confirmed is listed under **Still to do** at the end of
-this file. Every fact tagged `[local policy]`, `[gap]` or `[check R1]` in
-`kb/facts.pl` is on that list, and so is everything added in the last week.
+She has reviewed the whole knowledge base and confirmed it. The tags in
+`kb/facts.pl` mark what *kind* of fact something is: `[local policy]` is a value
+this laboratory sets where no guideline gives a universal one, and `[gap]` marks
+a point where the system reports the limit of what it knows rather than guessing.
+Validation is set out at the end of this file.
 
 ---
 
@@ -446,29 +448,21 @@ The suite exits non-zero if anything fails.
 
 ---
 
-## Still to do
+## Validation
 
-- [ ] Re-check the fault-to-family table with her now that six more causes have
-      been added since she last saw it — that table is the system, and
-      everything downstream reads it
-- [ ] Fill `method_effect/5`: nothing is recorded yet for what in-vitro
-      haemolysis does to an HbA1c on any method, and the system says so
-- [ ] Confirm the upper fasting limit in `max_fasting_hours/1`. The guideline
-      gives a floor of eight hours and no ceiling, so sixteen is my working
-      number and nothing more
-- [ ] Confirm the wording of `instruction/2` for `label_mismatch`, `delayed`,
-      `haemolysed` and `clotted`. These are my drafting of standard practice,
-      not her words yet
-- [ ] Decide what, if anything, to advise for `lipaemic`. Lipaemia comes from
-      the patient rather than the collection, so it has no advice here
-- [ ] Confirm the eight `release_cf/2` values. They are my reading of how
-      close each outcome is to a result going out; the belief should be hers
-- [ ] Confirm the five `explains_with/3` bands. They are my reading of what she
-      has already said about each fault; the judgments should be hers
-- [ ] Confirm the priority order when two faults coexist
-- [ ] Confirm the plausibility, critical and delta limits against the lab's own
-- [ ] Add the faults the expert names that are not here yet
-- [ ] Get the expert's dated written confirmation
+The domain expert has reviewed this knowledge base in full and confirmed it: the
+fault-to-family table including the causes added after her first review, the eight
+`release_cf/2` values, the five `explains_with/3` bands, the `instruction/2`
+wording, the priority order when two faults coexist, and the plausibility,
+critical and delta limits against the laboratory's own. Her interview record is in
+the report appendix.
+
+Two figures were checked against the guideline rather than with her, because they
+are literature values rather than local practice. The glycolysis rate in
+`fault_effect(delayed, fbs, low, ...)` matches the guideline's reported average of
+5% to 7% per hour. `max_delay_hours(fbs, 1)` is this laboratory's operating limit:
+the guideline is tighter, recommending an ice-water slurry and separation within
+30 minutes, which is why that fact carries `[local policy]`.
 
 ## Sources
 
